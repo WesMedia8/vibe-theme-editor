@@ -117,7 +117,7 @@ export default function ChatPanel({
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}>
-            \u00b7 {selectedThemeName}
+            · {selectedThemeName}
           </span>
         )}
       </div>
@@ -160,7 +160,7 @@ export default function ChatPanel({
                 </span>
               )}
               {approvedCount > 0 && pendingCount - approvedCount > 0 && (
-                <span style={{ color: 'var(--text-muted)' }}> \u00b7 </span>
+                <span style={{ color: 'var(--text-muted)' }}> · </span>
               )}
               {pendingCount - approvedCount > 0 && (
                 <span style={{ color: 'var(--amber)' }}>
@@ -237,7 +237,7 @@ export default function ChatPanel({
               color: 'var(--text-disabled)',
               fontFamily: 'var(--font-mono)',
             }}>
-              Enter to send \u00b7 Shift+Enter for newline
+              Enter to send · Shift+Enter for newline
             </span>
             <button
               onClick={handleSend}
