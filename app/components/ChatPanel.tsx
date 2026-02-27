@@ -26,6 +26,7 @@ const EXAMPLE_PROMPTS = [
 const PROVIDER_DISPLAY: Record<AIProvider, { label: string; color: string }> = {
   anthropic: { label: 'claude', color: 'var(--cyan)' },
   openai: { label: 'gpt-4o', color: '#10a37f' },
+  minimax: { label: 'minimax-m2.5', color: '#FF6B35' },
 }
 
 export default function ChatPanel({
@@ -211,7 +212,7 @@ export default function ChatPanel({
             value={input}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
-            placeholder={isStreaming ? `${aiProvider === 'openai' ? 'GPT' : 'Claude'} is thinking...` : 'Describe a theme change...'}
+            placeholder={isStreaming ? `${aiProvider === 'openai' ? 'GPT' : aiProvider === 'minimax' ? 'MiniMax' : 'Claude'} is thinking...` : 'Describe a theme change...'}
             disabled={isStreaming}
             rows={2}
             style={{
@@ -282,7 +283,7 @@ export default function ChatPanel({
           textAlign: 'center',
           fontFamily: 'var(--font-mono)',
         }}>
-          powered by {aiProvider === 'openai' ? 'gpt-4o' : 'claude-sonnet-4'}
+          powered by {PROVIDER_DISPLAY[aiProvider].label}
         </div>
       </div>
     </div>
