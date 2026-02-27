@@ -1,33 +1,67 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import type { AIProvider } from '../types'
 
 interface SetupViewProps {
   isShopifyConnected: boolean
   shopDomain: string | null
-  anthropicKey: string | null
-  onAnthropicKey: (key: string) => void
+  aiProvider: AIProvider
+  aiApiKey: string | null
+  onProviderChange: (provider: AIProvider) => void
+  onApiKey: (key: string) => void
   onShopifyConnected: () => void
+}
+
+const PROVIDER_INFO: Record<AIProvider, {
+  label: string
+  keyPrefix: string
+  keyPlaceholder: string
+  consoleUrl: string
+  consoleName: string
+  color: string
+  models: string
+}> = {
+  anthropic: {
+    label: 'Anthropic',
+    keyPrefix: 'sk-ant-',
+    keyPlaceholder: 'sk-ant-api03-...',
+    consoleUrl: 'https://console.anthropic.com',
+    consoleName: 'console.anthropic.com',
+    color: 'var(--cyan)',
+    models: 'Claude Sonnet 4, Opus 4',
+  },
+  openai: {
+    label: 'OpenAI',
+    keyPrefix: 'sk-',
+    keyPlaceholder: 'sk-proj-...',
+    consoleUrl: 'https://platform.openai.com/api-keys',
+    consoleName: 'platform.openai.com',
+    color: '#10a37f',
+    models: 'GPT-4o, GPT-4.1',
+  },
 }
 
 export default function SetupView({
   isShopifyConnected,
   shopDomain,
-  anthropicKey,
-  onAnthropicKey,
+  aiProvider,
+  aiApiKey,
+  onProviderChange,
+  onApiKey,
   onShopifyConnected,
 }: SetupViewProps) {
   const [shopInput, setShopInput] = useState('')
-  const [keyInput, setKeyInput] = useState(anthropicKey || '')
+  const [keyInput, setKeyInput] = useState(aiApiKey || '')
   const [keyMasked, setKeyMasked] = useState(true)
-  const [isTestingKey, setIsTestingKey] = useState(false)
-  const [keyValid, setKeyValid] = useState<boolean | null>(anthropicKey ? true : null)
+  const [keyValid, setKeyValid] = useState<boolean | null>(aiApiKey ? true : null)
   const [shopError, setShopError] = useState('')
   const [keyError, setKeyError] = useState('')
   const [titleChars, setTitleChars] = useState('')
   const titleRef = useRef<string>('Vibe Theme Editor')
-  const titleIndexRef = useRef(0)
   const animDoneRef = useRef(false)
+
+  const info = PROVIDER_INFO[aiProvider]
 
   // Typewriter effect for title
   useEffect(() => {
@@ -46,13 +80,19 @@ export default function SetupView({
     return () => clearInterval(interval)
   }, [])
 
+  // Reset key input when provider changes
+  useEffect(() => {
+    setKeyInput('')
+    setKeyValid(null)
+    setKeyError('')
+  }, [aiProvider])
+
   function handleShopConnect() {
     let shop = shopInput.trim()
     if (!shop) {
       setShopError('Enter your store domain')
       return
     }
-    // Normalize: remove https://, trailing slashes, etc.
     shop = shop.replace(/^https?:\/\//, '').replace(/\/$/, '')
     if (!shop.includes('.')) {
       shop = `${shop}.myshopify.com`
@@ -61,58 +101,27 @@ export default function SetupView({
     window.location.href = `/api/auth/shopify?shop=${encodeURIComponent(shop)}`
   }
 
-  async function handleTestKey() {
-    const key = keyInput.trim()
-    if (!key) {
-      setKeyError('Enter your API key')
-      return
-    }
-    setIsTestingKey(true)
-    setKeyError('')
-    try {
-      // Test by making a simple models list request
-      const res = await fetch('https://api.anthropic.com/v1/models', {
-        headers: {
-          'x-api-key': key,
-          'anthropic-version': '2023-06-01',
-        },
-      })
-      if (res.ok || res.status === 200) {
-        setKeyValid(true)
-        onAnthropicKey(key)
-      } else if (res.status === 401) {
-        setKeyValid(false)
-        setKeyError('Invalid API key')
-      } else {
-        // Might be a CORS issue in browser, just save it
-        setKeyValid(true)
-        onAnthropicKey(key)
-      }
-    } catch {
-      // CORS or network error - save key anyway, we'll validate on use
-      setKeyValid(true)
-      onAnthropicKey(key)
-    } finally {
-      setIsTestingKey(false)
-    }
-  }
-
   function handleSaveKey() {
     const key = keyInput.trim()
     if (!key) {
       setKeyError('Enter your API key')
       return
     }
-    if (!key.startsWith('sk-ant-')) {
+    // Validate prefix based on provider
+    if (aiProvider === 'anthropic' && !key.startsWith('sk-ant-')) {
       setKeyError('Anthropic API keys start with sk-ant-')
+      return
+    }
+    if (aiProvider === 'openai' && !key.startsWith('sk-')) {
+      setKeyError('OpenAI API keys start with sk-')
       return
     }
     setKeyError('')
     setKeyValid(true)
-    onAnthropicKey(key)
+    onApiKey(key)
   }
 
-  const canEnterEditor = isShopifyConnected && (anthropicKey || keyValid === true)
+  const canEnterEditor = isShopifyConnected && (aiApiKey || keyValid === true)
 
   return (
     <div style={{
@@ -155,7 +164,7 @@ export default function SetupView({
         color: 'var(--text-muted)',
         letterSpacing: '0.15em',
       }}>
-        v0.1.0
+        v0.2.0
       </div>
       <div style={{
         position: 'absolute',
@@ -166,7 +175,7 @@ export default function SetupView({
         color: 'var(--text-muted)',
         letterSpacing: '0.05em',
       }}>
-        shopify × claude
+        shopify × ai
       </div>
 
       {/* Main content */}
@@ -230,7 +239,7 @@ export default function SetupView({
           }}>
             AI-powered Shopify theme editing.{' '}
             <span style={{ color: 'var(--text-muted)' }}>
-              Chat with Claude, preview diffs, push live.
+              Chat with AI, preview diffs, push live.
             </span>
           </p>
         </div>
@@ -333,7 +342,7 @@ export default function SetupView({
             )}
           </div>
 
-          {/* Step 2: Anthropic */}
+          {/* Step 2: AI Provider */}
           <div style={{
             background: 'var(--bg-surface)',
             border: `1px solid ${keyValid === true ? 'rgba(0, 229, 255, 0.25)' : 'var(--border-default)'}`,
@@ -368,16 +377,65 @@ export default function SetupView({
                 fontWeight: 600,
                 color: keyValid === true ? 'var(--cyan)' : 'var(--text-primary)',
               }}>
-                Anthropic API Key
+                AI Provider
               </span>
             </div>
 
+            {/* Provider toggle */}
+            <div style={{
+              display: 'flex',
+              gap: 8,
+              marginBottom: 16,
+            }}>
+              {(['anthropic', 'openai'] as AIProvider[]).map(p => {
+                const pInfo = PROVIDER_INFO[p]
+                const isActive = aiProvider === p
+                return (
+                  <button
+                    key={p}
+                    onClick={() => onProviderChange(p)}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '10px 12px',
+                      background: isActive ? 'var(--bg-overlay)' : 'var(--bg-elevated)',
+                      border: `1px solid ${isActive ? pInfo.color : 'var(--border-subtle)'}`,
+                      borderRadius: 'var(--radius-md)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      outline: isActive ? `2px solid ${pInfo.color}` : 'none',
+                      outlineOffset: -1,
+                    }}
+                  >
+                    <span style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: isActive ? pInfo.color : 'var(--text-secondary)',
+                    }}>
+                      {pInfo.label}
+                    </span>
+                    <span style={{
+                      fontSize: 10,
+                      color: 'var(--text-muted)',
+                      fontFamily: 'var(--font-mono)',
+                    }}>
+                      {pInfo.models}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* API key input */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
               <div style={{ flex: 1, position: 'relative' }}>
                 <input
                   className="input input-mono"
                   type={keyMasked ? 'password' : 'text'}
-                  placeholder="sk-ant-api03-..."
+                  placeholder={info.keyPlaceholder}
                   value={keyInput}
                   onChange={e => {
                     setKeyInput(e.target.value)
@@ -438,15 +496,15 @@ export default function SetupView({
             )}
 
             <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Your key is stored in browser localStorage and only used to call the Anthropic API.
+              Your key is stored in browser localStorage and only used to call the {info.label} API.
               Get one at{' '}
               <a
-                href="https://console.anthropic.com"
+                href={info.consoleUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: 'var(--cyan)', textDecoration: 'none' }}
+                style={{ color: info.color, textDecoration: 'none' }}
               >
-                console.anthropic.com
+                {info.consoleName}
               </a>
             </p>
           </div>
@@ -478,7 +536,7 @@ export default function SetupView({
           color: 'var(--text-disabled)',
           letterSpacing: '0.05em',
         }}>
-          requires shopify partner app \u00b7 anthropic account
+          requires shopify partner app \u00b7 anthropic or openai account
         </div>
       </div>
     </div>

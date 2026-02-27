@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
-const DEFAULT_MODEL = 'claude-sonnet-4-20250514'
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
+
+const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514'
+const DEFAULT_OPENAI_MODEL = 'gpt-4o'
 
 interface FileContext {
   filename: string
@@ -12,6 +15,8 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
 }
+
+type Provider = 'anthropic' | 'openai'
 
 function buildSystemPrompt(themeFiles: FileContext[]): string {
   let prompt = `You are an expert Shopify theme developer with deep knowledge of Liquid templating, CSS, JavaScript, and Shopify's theme architecture.
@@ -60,12 +65,168 @@ When the user asks for theme changes:
   return prompt
 }
 
+async function handleAnthropic(apiKey: string, model: string, systemPrompt: string, messages: Message[]) {
+  const res = await fetch(ANTHROPIC_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
+      stream: true,
+    }),
+  })
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}))
+    const errMsg = (errData as { error?: { message?: string } }).error?.message || `Anthropic API error: ${res.status}`
+    
+    if (res.status === 401) {
+      return NextResponse.json({ error: 'Invalid API key. Please check your Anthropic API key.' }, { status: 401 })
+    }
+    if (res.status === 429) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Please try again in a moment.' }, { status: 429 })
+    }
+    
+    return NextResponse.json({ error: errMsg }, { status: res.status })
+  }
+
+  // Stream through directly — Anthropic SSE format
+  const { readable, writable } = new TransformStream()
+  const writer = writable.getWriter()
+  const encoder = new TextEncoder()
+
+  ;(async () => {
+    try {
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        await writer.write(encoder.encode(chunk))
+      }
+    } catch (err) {
+      console.error('Anthropic stream error:', err)
+    } finally {
+      await writer.close()
+    }
+  })()
+
+  return new Response(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
+
+async function handleOpenAI(apiKey: string, model: string, systemPrompt: string, messages: Message[]) {
+  const res = await fetch(OPENAI_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 8192,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages.map(m => ({ role: m.role, content: m.content })),
+      ],
+      stream: true,
+    }),
+  })
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}))
+    const errMsg = (errData as { error?: { message?: string } }).error?.message || `OpenAI API error: ${res.status}`
+
+    if (res.status === 401) {
+      return NextResponse.json({ error: 'Invalid API key. Please check your OpenAI API key.' }, { status: 401 })
+    }
+    if (res.status === 429) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Please try again in a moment.' }, { status: 429 })
+    }
+
+    return NextResponse.json({ error: errMsg }, { status: res.status })
+  }
+
+  // Transform OpenAI SSE format to match Anthropic's format so the client parser works uniformly
+  const { readable, writable } = new TransformStream()
+  const writer = writable.getWriter()
+  const encoder = new TextEncoder()
+
+  ;(async () => {
+    try {
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim()
+            if (data === '[DONE]') {
+              await writer.write(encoder.encode('data: [DONE]\n\n'))
+              continue
+            }
+            try {
+              const parsed = JSON.parse(data)
+              const delta = parsed.choices?.[0]?.delta
+              if (delta?.content) {
+                // Re-emit as Anthropic-style content_block_delta
+                const anthropicEvent = {
+                  type: 'content_block_delta',
+                  delta: { type: 'text_delta', text: delta.content },
+                }
+                await writer.write(encoder.encode(`data: ${JSON.stringify(anthropicEvent)}\n\n`))
+              }
+            } catch {
+              // skip malformed
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('OpenAI stream error:', err)
+    } finally {
+      await writer.close()
+    }
+  })()
+
+  return new Response(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
+
 export async function POST(request: NextRequest) {
   let body: {
     messages: Message[]
     apiKey: string
     themeFiles?: FileContext[]
     model?: string
+    provider?: Provider
   }
 
   try {
@@ -74,7 +235,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  const { messages, apiKey, themeFiles = [], model = DEFAULT_MODEL } = body
+  const { messages, apiKey, themeFiles = [], provider = 'anthropic' } = body
+  const model = body.model || (provider === 'openai' ? DEFAULT_OPENAI_MODEL : DEFAULT_ANTHROPIC_MODEL)
 
   if (!apiKey) {
     return NextResponse.json({ error: 'Missing API key' }, { status: 400 })
@@ -87,74 +249,13 @@ export async function POST(request: NextRequest) {
   const systemPrompt = buildSystemPrompt(themeFiles)
 
   try {
-    const anthropicRes = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 8192,
-        system: systemPrompt,
-        messages: messages.map(m => ({
-          role: m.role,
-          content: m.content,
-        })),
-        stream: true,
-      }),
-    })
-
-    if (!anthropicRes.ok) {
-      const errData = await anthropicRes.json().catch(() => ({}))
-      const errMsg = (errData as { error?: { message?: string } }).error?.message || `Anthropic API error: ${anthropicRes.status}`
-      
-      if (anthropicRes.status === 401) {
-        return NextResponse.json({ error: 'Invalid API key. Please check your Anthropic API key.' }, { status: 401 })
-      }
-      if (anthropicRes.status === 429) {
-        return NextResponse.json({ error: 'Rate limit exceeded. Please try again in a moment.' }, { status: 429 })
-      }
-      
-      return NextResponse.json({ error: errMsg }, { status: anthropicRes.status })
+    if (provider === 'openai') {
+      return await handleOpenAI(apiKey, model, systemPrompt, messages)
+    } else {
+      return await handleAnthropic(apiKey, model, systemPrompt, messages)
     }
-
-    // Stream the response back to the client
-    const { readable, writable } = new TransformStream()
-    const writer = writable.getWriter()
-    const encoder = new TextEncoder()
-
-    // Start streaming in background
-    ;(async () => {
-      try {
-        const reader = anthropicRes.body!.getReader()
-        const decoder = new TextDecoder()
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          const chunk = decoder.decode(value, { stream: true })
-          await writer.write(encoder.encode(chunk))
-        }
-      } catch (err) {
-        console.error('Stream error:', err)
-      } finally {
-        await writer.close()
-      }
-    })()
-
-    return new Response(readable, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      },
-    })
   } catch (err) {
     console.error('Chat API error:', err)
-    return NextResponse.json({ error: 'Failed to connect to Anthropic API' }, { status: 500 })
+    return NextResponse.json({ error: `Failed to connect to ${provider === 'openai' ? 'OpenAI' : 'Anthropic'} API` }, { status: 500 })
   }
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { ShopifyTheme } from '../types'
+import type { ShopifyTheme, AIProvider } from '../types'
 
 interface TopBarProps {
   shopDomain: string | null
@@ -11,9 +11,15 @@ interface TopBarProps {
   isPushing: boolean
   onPushChanges: () => void
   onDisconnect: () => void
-  onSettingsUpdate: (key: string) => void
-  anthropicKey: string | null
+  onSettingsUpdate: (provider: AIProvider, key: string) => void
+  aiProvider: AIProvider
+  aiApiKey: string | null
 }
+
+const PROVIDER_OPTIONS: { value: AIProvider; label: string; prefix: string; placeholder: string }[] = [
+  { value: 'anthropic', label: 'Anthropic (Claude)', prefix: 'sk-ant-', placeholder: 'sk-ant-...' },
+  { value: 'openai', label: 'OpenAI (GPT-4o)', prefix: 'sk-', placeholder: 'sk-proj-...' },
+]
 
 export default function TopBar({
   shopDomain,
@@ -24,19 +30,30 @@ export default function TopBar({
   onPushChanges,
   onDisconnect,
   onSettingsUpdate,
-  anthropicKey,
+  aiProvider,
+  aiApiKey,
 }: TopBarProps) {
   const [showSettings, setShowSettings] = useState(false)
-  const [newKey, setNewKey] = useState(anthropicKey || '')
+  const [settingsProvider, setSettingsProvider] = useState<AIProvider>(aiProvider)
+  const [newKey, setNewKey] = useState(aiApiKey || '')
   const [keySaved, setKeySaved] = useState(false)
+
+  function handleOpenSettings() {
+    setSettingsProvider(aiProvider)
+    setNewKey(aiApiKey || '')
+    setKeySaved(false)
+    setShowSettings(true)
+  }
 
   function handleSaveKey() {
     if (newKey.trim()) {
-      onSettingsUpdate(newKey.trim())
+      onSettingsUpdate(settingsProvider, newKey.trim())
       setKeySaved(true)
       setTimeout(() => setKeySaved(false), 2000)
     }
   }
+
+  const activeOption = PROVIDER_OPTIONS.find(p => p.value === aiProvider)
 
   return (
     <>
@@ -151,6 +168,28 @@ export default function TopBar({
 
         {/* Right: Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {/* Provider badge */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '3px 8px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)',
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+          }}>
+            <span style={{
+              width: 5,
+              height: 5,
+              borderRadius: '50%',
+              background: aiProvider === 'openai' ? '#10a37f' : 'var(--cyan)',
+            }} />
+            {aiProvider === 'openai' ? 'OpenAI' : 'Anthropic'}
+          </div>
+
           {/* Push Changes button */}
           <button
             className="btn btn-primary"
@@ -200,7 +239,7 @@ export default function TopBar({
           {/* Settings */}
           <button
             className="btn btn-ghost"
-            onClick={() => setShowSettings(true)}
+            onClick={handleOpenSettings}
             style={{ padding: '6px 8px' }}
             data-tooltip="Settings"
           >
@@ -283,7 +322,7 @@ export default function TopBar({
               </div>
             </div>
 
-            {/* Anthropic key */}
+            {/* AI Provider selector */}
             <div style={{ marginBottom: 16 }}>
               <label style={{
                 display: 'block',
@@ -294,13 +333,54 @@ export default function TopBar({
                 marginBottom: 6,
                 textTransform: 'uppercase',
               }}>
-                Anthropic API Key
+                AI Provider
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {PROVIDER_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => {
+                      setSettingsProvider(opt.value)
+                      setNewKey('')
+                      setKeySaved(false)
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      background: settingsProvider === opt.value ? 'var(--bg-overlay)' : 'var(--bg-surface)',
+                      border: `1px solid ${settingsProvider === opt.value ? 'var(--cyan)' : 'var(--border-subtle)'}`,
+                      borderRadius: 'var(--radius-md)',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      fontWeight: settingsProvider === opt.value ? 600 : 400,
+                      color: settingsProvider === opt.value ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* API Key */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{
+                display: 'block',
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                letterSpacing: '0.08em',
+                marginBottom: 6,
+                textTransform: 'uppercase',
+              }}>
+                {PROVIDER_OPTIONS.find(p => p.value === settingsProvider)?.label} API Key
               </label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   className="input input-mono"
                   type="password"
-                  placeholder="sk-ant-..."
+                  placeholder={PROVIDER_OPTIONS.find(p => p.value === settingsProvider)?.placeholder}
                   value={newKey}
                   onChange={e => {
                     setNewKey(e.target.value)

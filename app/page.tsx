@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import SetupView from './components/SetupView'
 import EditorView from './components/EditorView'
-import type { AppState, ShopifyTheme, ThemeFile, PendingChange, ChatMessage } from './types'
+import type { AppState, AIProvider, ShopifyTheme, ThemeFile, PendingChange, ChatMessage } from './types'
 
 function createInitialState(): AppState {
   return {
     isShopifyConnected: false,
     shopDomain: null,
-    anthropicKey: null,
+    aiProvider: 'anthropic',
+    aiApiKey: null,
     themes: [],
     selectedTheme: null,
     themeFiles: [],
@@ -32,11 +33,17 @@ export default function Home() {
     setMounted(true)
     checkSession()
     
-    // Load Anthropic key from localStorage
-    const storedKey = localStorage.getItem('vte_anthropic_key')
-    if (storedKey) {
-      setState(prev => ({ ...prev, anthropicKey: storedKey }))
-    }
+    // Load saved provider + key from localStorage
+    const storedProvider = localStorage.getItem('vte_ai_provider') as AIProvider | null
+    const storedKey = localStorage.getItem('vte_ai_api_key')
+    // Migration: check old key too
+    const legacyKey = localStorage.getItem('vte_anthropic_key')
+
+    setState(prev => ({
+      ...prev,
+      aiProvider: storedProvider || 'anthropic',
+      aiApiKey: storedKey || legacyKey || null,
+    }))
   }, [])
 
   async function checkSession() {
@@ -140,9 +147,19 @@ export default function Home() {
     }
   }
 
-  function handleAnthropicKey(key: string) {
-    localStorage.setItem('vte_anthropic_key', key)
-    setState(prev => ({ ...prev, anthropicKey: key }))
+  function handleProviderChange(provider: AIProvider) {
+    localStorage.setItem('vte_ai_provider', provider)
+    // Clear the key when switching providers (different key formats)
+    localStorage.removeItem('vte_ai_api_key')
+    setState(prev => ({ ...prev, aiProvider: provider, aiApiKey: null }))
+  }
+
+  function handleApiKey(key: string) {
+    localStorage.setItem('vte_ai_api_key', key)
+    localStorage.setItem('vte_ai_provider', state.aiProvider)
+    // Clean up legacy key
+    localStorage.removeItem('vte_anthropic_key')
+    setState(prev => ({ ...prev, aiApiKey: key }))
   }
 
   function handleThemeSelect(theme: ShopifyTheme) {
@@ -211,7 +228,6 @@ export default function Home() {
       })
 
       if (res.ok) {
-        // Update file contents and clear approved changes
         setState(prev => {
           const newContents = new Map(prev.fileContents)
           const newChanges = new Map(prev.pendingChanges)
@@ -239,7 +255,7 @@ export default function Home() {
   }
 
   async function handleChatMessage(content: string) {
-    if (!state.anthropicKey || !state.selectedTheme) return
+    if (!state.aiApiKey || !state.selectedTheme) return
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -280,7 +296,8 @@ export default function Home() {
             role: m.role,
             content: m.content,
           })),
-          apiKey: state.anthropicKey,
+          apiKey: state.aiApiKey,
+          provider: state.aiProvider,
           themeFiles: contextFiles,
         }),
       })
@@ -398,15 +415,19 @@ export default function Home() {
 
   function handleDisconnect() {
     fetch('/api/session', { method: 'DELETE' }).catch(() => {})
+    localStorage.removeItem('vte_ai_api_key')
+    localStorage.removeItem('vte_ai_provider')
     localStorage.removeItem('vte_anthropic_key')
     setState(createInitialState())
   }
 
-  function handleSettingsUpdate(key: string) {
-    handleAnthropicKey(key)
+  function handleSettingsUpdate(provider: AIProvider, key: string) {
+    localStorage.setItem('vte_ai_provider', provider)
+    localStorage.setItem('vte_ai_api_key', key)
+    setState(prev => ({ ...prev, aiProvider: provider, aiApiKey: key }))
   }
 
-  const isReady = state.isShopifyConnected && !!state.anthropicKey
+  const isReady = state.isShopifyConnected && !!state.aiApiKey
 
   if (!mounted) {
     return (
@@ -429,8 +450,10 @@ export default function Home() {
       <SetupView
         isShopifyConnected={state.isShopifyConnected}
         shopDomain={state.shopDomain}
-        anthropicKey={state.anthropicKey}
-        onAnthropicKey={handleAnthropicKey}
+        aiProvider={state.aiProvider}
+        aiApiKey={state.aiApiKey}
+        onProviderChange={handleProviderChange}
+        onApiKey={handleApiKey}
         onShopifyConnected={() => {
           setState(prev => ({ ...prev, isShopifyConnected: true }))
           checkSession()

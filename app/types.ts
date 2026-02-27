@@ -1,5 +1,7 @@
 // Shared types for Vibe Theme Editor
 
+export type AIProvider = 'anthropic' | 'openai'
+
 export interface ShopifyTheme {
   id: string
   name: string
@@ -39,8 +41,9 @@ export interface AppState {
   isShopifyConnected: boolean
   shopDomain: string | null
   
-  // Anthropic key
-  anthropicKey: string | null
+  // AI provider
+  aiProvider: AIProvider
+  aiApiKey: string | null
   
   // Theme state
   themes: ShopifyTheme[]

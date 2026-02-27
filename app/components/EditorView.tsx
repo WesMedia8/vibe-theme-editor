@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { AppState, ShopifyTheme, PendingChange } from '../types'
+import type { AppState, AIProvider, ShopifyTheme, PendingChange } from '../types'
 import { getFileType, getFileColor } from '../types'
 import TopBar from './TopBar'
 import FileTree from './FileTree'
@@ -20,7 +20,7 @@ interface EditorViewProps {
   onPushChanges: () => void
   onChatMessage: (content: string) => void
   onDisconnect: () => void
-  onSettingsUpdate: (key: string) => void
+  onSettingsUpdate: (provider: AIProvider, key: string) => void
 }
 
 export default function EditorView({
@@ -70,7 +70,8 @@ export default function EditorView({
         onPushChanges={onPushChanges}
         onDisconnect={onDisconnect}
         onSettingsUpdate={onSettingsUpdate}
-        anthropicKey={state.anthropicKey}
+        aiProvider={state.aiProvider}
+        aiApiKey={state.aiApiKey}
       />
 
       {/* Main layout */}
@@ -158,6 +159,7 @@ export default function EditorView({
           onPushChanges={onPushChanges}
           isPushing={state.isLoading}
           selectedThemeName={state.selectedTheme?.name || null}
+          aiProvider={state.aiProvider}
         />
       </div>
     </div>
