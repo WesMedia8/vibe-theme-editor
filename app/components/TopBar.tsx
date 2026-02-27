@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { ShopifyTheme, AIProvider } from '../types'
+import type { ShopifyTheme, AIProvider, ViewMode } from '../types'
 
 interface TopBarProps {
   shopDomain: string | null
@@ -14,6 +14,8 @@ interface TopBarProps {
   onSettingsUpdate: (provider: AIProvider, key: string) => void
   aiProvider: AIProvider
   aiApiKey: string | null
+  viewMode: ViewMode
+  onViewModeChange: (mode: ViewMode) => void
 }
 
 const PROVIDER_OPTIONS: { value: AIProvider; label: string; prefix: string; placeholder: string }[] = [
@@ -32,6 +34,8 @@ export default function TopBar({
   onSettingsUpdate,
   aiProvider,
   aiApiKey,
+  viewMode,
+  onViewModeChange,
 }: TopBarProps) {
   const [showSettings, setShowSettings] = useState(false)
   const [settingsProvider, setSettingsProvider] = useState<AIProvider>(aiProvider)
@@ -106,7 +110,7 @@ export default function TopBar({
         {/* Divider */}
         <div style={{ width: 1, height: 20, background: 'var(--border-subtle)' }} />
 
-        {/* Center: Store + Theme info */}
+        {/* Center: Store + Theme info + View Mode toggle */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -164,6 +168,49 @@ export default function TopBar({
               </div>
             </>
           )}
+
+          {/* Divider before view toggle */}
+          {(shopDomain || selectedTheme) && (
+            <div style={{ width: 1, height: 16, background: 'var(--border-subtle)', flexShrink: 0 }} />
+          )}
+
+          {/* Code / Preview segmented control */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)',
+            padding: 2,
+            gap: 1,
+            flexShrink: 0,
+          }}>
+            <ViewModeButton
+              mode="code"
+              active={viewMode === 'code'}
+              onClick={() => onViewModeChange('code')}
+              icon={
+                <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                  <path d="M3 3L1 5.5L3 8M8 3L10 5.5L8 8M6 2L5 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              }
+              label="Code"
+            />
+            <ViewModeButton
+              mode="preview"
+              active={viewMode === 'preview'}
+              onClick={() => onViewModeChange('preview')}
+              icon={
+                <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                  <rect x="1" y="2" width="9" height="7" rx="1.2" stroke="currentColor" strokeWidth="1.2"/>
+                  <path d="M1 4h9" stroke="currentColor" strokeWidth="1.2"/>
+                  <circle cx="2.8" cy="3" r="0.5" fill="currentColor"/>
+                  <circle cx="4.5" cy="3" r="0.5" fill="currentColor"/>
+                </svg>
+              }
+              label="Preview"
+            />
+          </div>
         </div>
 
         {/* Right: Actions */}
@@ -423,6 +470,47 @@ export default function TopBar({
         </div>
       )}
     </>
+  )
+}
+
+interface ViewModeButtonProps {
+  mode: ViewMode
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+}
+
+function ViewModeButton({ mode, active, onClick, icon, label }: ViewModeButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '3px 8px',
+        background: active ? 'var(--bg-overlay)' : 'transparent',
+        border: active ? '1px solid var(--border-default)' : '1px solid transparent',
+        borderRadius: 'var(--radius-sm)',
+        cursor: 'pointer',
+        color: active ? 'var(--cyan)' : 'var(--text-muted)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 11,
+        fontWeight: active ? 600 : 400,
+        transition: 'all 0.12s ease',
+        whiteSpace: 'nowrap',
+      }}
+      onMouseEnter={e => {
+        if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'
+      }}
+      onMouseLeave={e => {
+        if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'
+      }}
+    >
+      {icon}
+      {label}
+    </button>
   )
 }
 

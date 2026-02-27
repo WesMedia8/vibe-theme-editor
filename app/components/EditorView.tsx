@@ -1,13 +1,14 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { AppState, AIProvider, ShopifyTheme, PendingChange } from '../types'
+import type { AppState, AIProvider, ShopifyTheme, PendingChange, ViewMode } from '../types'
 import { getFileType, getFileColor } from '../types'
 import TopBar from './TopBar'
 import FileTree from './FileTree'
 import CodeViewer from './CodeViewer'
 import DiffViewer from './DiffViewer'
 import ChatPanel from './ChatPanel'
+import PreviewPanel from './PreviewPanel'
 
 interface EditorViewProps {
   state: AppState
@@ -21,6 +22,9 @@ interface EditorViewProps {
   onChatMessage: (content: string) => void
   onDisconnect: () => void
   onSettingsUpdate: (provider: AIProvider, key: string) => void
+  viewMode: ViewMode
+  onViewModeChange: (mode: ViewMode) => void
+  previewRefreshKey: number
 }
 
 export default function EditorView({
@@ -35,6 +39,9 @@ export default function EditorView({
   onChatMessage,
   onDisconnect,
   onSettingsUpdate,
+  viewMode,
+  onViewModeChange,
+  previewRefreshKey,
 }: EditorViewProps) {
   const pendingChanges = state.pendingChanges
   const pendingCount = pendingChanges.size
@@ -72,6 +79,8 @@ export default function EditorView({
         onSettingsUpdate={onSettingsUpdate}
         aiProvider={state.aiProvider}
         aiApiKey={state.aiApiKey}
+        viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
       />
 
       {/* Main layout */}
@@ -81,75 +90,86 @@ export default function EditorView({
         overflow: 'hidden',
         minHeight: 0,
       }}>
-        {/* Left: File tree */}
-        <FileTree
-          themes={state.themes}
-          selectedTheme={state.selectedTheme}
-          files={state.themeFiles}
-          activeFile={state.activeFile}
-          openFiles={state.openFiles}
-          pendingFiles={pendingFiles}
-          isLoading={state.isLoading}
-          onThemeSelect={onThemeSelect}
-          onFileClick={onFileClick}
-        />
+        {viewMode === 'code' ? (
+          <>
+            {/* Left: File tree */}
+            <FileTree
+              themes={state.themes}
+              selectedTheme={state.selectedTheme}
+              files={state.themeFiles}
+              activeFile={state.activeFile}
+              openFiles={state.openFiles}
+              pendingFiles={pendingFiles}
+              isLoading={state.isLoading}
+              onThemeSelect={onThemeSelect}
+              onFileClick={onFileClick}
+            />
 
-        {/* Center: Code/Diff viewer */}
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          minWidth: 0,
-        }}>
-          {/* Tab bar */}
-          {state.openFiles.length > 0 && (
+            {/* Center: Code/Diff viewer */}
             <div style={{
+              flex: 1,
               display: 'flex',
-              background: 'var(--bg-surface)',
-              borderBottom: '1px solid var(--border-subtle)',
-              overflowX: 'auto',
-              flexShrink: 0,
-              scrollbarWidth: 'none',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              minWidth: 0,
             }}>
-              {state.openFiles.map(filename => (
-                <FileTab
-                  key={filename}
-                  filename={filename}
-                  isActive={state.activeFile === filename}
-                  hasPending={pendingFiles.has(filename)}
-                  onTabClick={onTabClick}
-                  onTabClose={onTabClose}
-                />
-              ))}
+              {/* Tab bar */}
+              {state.openFiles.length > 0 && (
+                <div style={{
+                  display: 'flex',
+                  background: 'var(--bg-surface)',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  overflowX: 'auto',
+                  flexShrink: 0,
+                  scrollbarWidth: 'none',
+                }}>
+                  {state.openFiles.map(filename => (
+                    <FileTab
+                      key={filename}
+                      filename={filename}
+                      isActive={state.activeFile === filename}
+                      hasPending={pendingFiles.has(filename)}
+                      onTabClick={onTabClick}
+                      onTabClose={onTabClose}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Content area */}
+              <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+                {!state.activeFile ? (
+                  <EmptyEditor
+                    hasFiles={state.openFiles.length > 0}
+                    hasTheme={!!state.selectedTheme}
+                  />
+                ) : activeChange ? (
+                  <DiffViewer
+                    change={activeChange}
+                    onApprove={onApproveChange}
+                    onReject={onRejectChange}
+                  />
+                ) : activeContent !== null ? (
+                  <CodeViewer
+                    filename={state.activeFile}
+                    content={activeContent}
+                  />
+                ) : (
+                  <LoadingContent />
+                )}
+              </div>
             </div>
-          )}
+          </>
+        ) : (
+          /* Preview mode: full-width iframe (no file tree) */
+          <PreviewPanel
+            shopDomain={state.shopDomain}
+            selectedTheme={state.selectedTheme}
+            refreshKey={previewRefreshKey}
+          />
+        )}
 
-          {/* Content area */}
-          <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
-            {!state.activeFile ? (
-              <EmptyEditor
-                hasFiles={state.openFiles.length > 0}
-                hasTheme={!!state.selectedTheme}
-              />
-            ) : activeChange ? (
-              <DiffViewer
-                change={activeChange}
-                onApprove={onApproveChange}
-                onReject={onRejectChange}
-              />
-            ) : activeContent !== null ? (
-              <CodeViewer
-                filename={state.activeFile}
-                content={activeContent}
-              />
-            ) : (
-              <LoadingContent />
-            )}
-          </div>
-        </div>
-
-        {/* Right: Chat panel */}
+        {/* Right: Chat panel — always visible */}
         <ChatPanel
           messages={state.messages}
           onSendMessage={onChatMessage}
@@ -160,6 +180,10 @@ export default function EditorView({
           isPushing={state.isLoading}
           selectedThemeName={state.selectedTheme?.name || null}
           aiProvider={state.aiProvider}
+          onOpenFile={filename => {
+            onViewModeChange('code')
+            onFileClick(filename)
+          }}
         />
       </div>
     </div>
