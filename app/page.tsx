@@ -158,10 +158,13 @@ export default function Home() {
 
   function handleApiKey(key: string) {
     localStorage.setItem('vte_ai_api_key', key)
-    localStorage.setItem('vte_ai_provider', state.aiProvider)
-    // Clean up legacy key
-    localStorage.removeItem('vte_anthropic_key')
-    setState(prev => ({ ...prev, aiApiKey: key }))
+    // Use setState callback to read the latest provider (avoids stale closure)
+    setState(prev => {
+      localStorage.setItem('vte_ai_provider', prev.aiProvider)
+      // Clean up legacy key
+      localStorage.removeItem('vte_anthropic_key')
+      return { ...prev, aiApiKey: key }
+    })
   }
 
   function handleThemeSelect(theme: ShopifyTheme) {
