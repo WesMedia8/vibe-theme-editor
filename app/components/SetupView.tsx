@@ -40,6 +40,15 @@ const PROVIDER_INFO: Record<AIProvider, {
     color: '#10a37f',
     models: 'GPT-4o, GPT-4.1',
   },
+  minimax: {
+    label: 'MiniMax',
+    keyPrefix: 'eyJ',
+    keyPlaceholder: 'eyJ...',
+    consoleUrl: 'https://platform.minimax.io',
+    consoleName: 'platform.minimax.io',
+    color: '#FF6B35',
+    models: 'MiniMax-M2.5',
+  },
 }
 
 export default function SetupView({
@@ -116,6 +125,11 @@ export default function SetupView({
       setKeyError('OpenAI API keys start with sk-')
       return
     }
+    // MiniMax keys are JWT-style tokens, just check length
+    if (aiProvider === 'minimax' && key.length < 20) {
+      setKeyError('MiniMax API key seems too short')
+      return
+    }
     setKeyError('')
     setKeyValid(true)
     onApiKey(key)
@@ -175,7 +189,7 @@ export default function SetupView({
         color: 'var(--text-muted)',
         letterSpacing: '0.05em',
       }}>
-        shopify × ai
+        shopify \u00d7 ai
       </div>
 
       {/* Main content */}
@@ -274,7 +288,7 @@ export default function SetupView({
                 color: isShopifyConnected ? 'var(--green)' : 'var(--text-muted)',
                 flexShrink: 0,
               }}>
-                {isShopifyConnected ? '✓' : '1'}
+                {isShopifyConnected ? '\u2713' : '1'}
               </div>
               <span style={{
                 fontSize: 13,
@@ -370,7 +384,7 @@ export default function SetupView({
                 color: keyValid === true ? 'var(--cyan)' : 'var(--text-muted)',
                 flexShrink: 0,
               }}>
-                {keyValid === true ? '✓' : '2'}
+                {keyValid === true ? '\u2713' : '2'}
               </div>
               <span style={{
                 fontSize: 13,
@@ -386,8 +400,9 @@ export default function SetupView({
               display: 'flex',
               gap: 8,
               marginBottom: 16,
+              flexWrap: 'wrap',
             }}>
-              {(['anthropic', 'openai'] as AIProvider[]).map(p => {
+              {(['anthropic', 'openai', 'minimax'] as AIProvider[]).map(p => {
                 const pInfo = PROVIDER_INFO[p]
                 const isActive = aiProvider === p
                 return (
@@ -395,7 +410,8 @@ export default function SetupView({
                     key={p}
                     onClick={() => onProviderChange(p)}
                     style={{
-                      flex: 1,
+                      flex: '1 1 auto',
+                      minWidth: 120,
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
@@ -491,7 +507,7 @@ export default function SetupView({
 
             {keyValid === true && (
               <div style={{ color: 'var(--green)', fontSize: 11, marginBottom: 6 }}>
-                ✓ API key saved
+                \u2713 API key saved
               </div>
             )}
 
@@ -536,7 +552,7 @@ export default function SetupView({
           color: 'var(--text-disabled)',
           letterSpacing: '0.05em',
         }}>
-          requires shopify partner app · anthropic or openai account
+          requires shopify partner app \u00b7 anthropic, openai, or minimax account
         </div>
       </div>
     </div>
