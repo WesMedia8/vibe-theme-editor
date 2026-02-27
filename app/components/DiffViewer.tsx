@@ -201,7 +201,7 @@ export default function DiffViewer({ change, onApprove, onReject }: DiffViewerPr
               borderRadius: 3,
               fontFamily: 'var(--font-mono)',
             }}>
-              \u2713 approved
+              ✓ approved
             </span>
           )}
         </div>
@@ -294,7 +294,7 @@ export default function DiffViewer({ change, onApprove, onReject }: DiffViewerPr
                     borderBottom: '1px solid var(--border-subtle)',
                   }}
                 >
-                  \u00b7\u00b7\u00b7
+                  ···
                 </div>
               )
             }
