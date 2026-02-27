@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import SetupView from './components/SetupView'
 import EditorView from './components/EditorView'
-import type { AppState, AIProvider, ShopifyTheme, ThemeFile, PendingChange, ChatMessage } from './types'
+import type { AppState, AIProvider, ShopifyTheme, ThemeFile, PendingChange, ChatMessage, ViewMode } from './types'
 
 function createInitialState(): AppState {
   return {
@@ -21,12 +21,14 @@ function createInitialState(): AppState {
     messages: [],
     isLoading: false,
     error: null,
+    viewMode: 'code',
   }
 }
 
 export default function Home() {
   const [state, setState] = useState<AppState>(createInitialState)
   const [mounted, setMounted] = useState(false)
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0)
 
   // Check for existing session on mount
   useEffect(() => {
@@ -244,6 +246,8 @@ export default function Home() {
             isLoading: false,
           }
         })
+        // Trigger iframe refresh after successful push
+        setPreviewRefreshKey(k => k + 1)
       } else {
         const err = await res.json()
         setState(prev => ({ ...prev, isLoading: false, error: err.error || 'Failed to push changes' }))
@@ -427,6 +431,10 @@ export default function Home() {
     setState(prev => ({ ...prev, aiProvider: provider, aiApiKey: key }))
   }
 
+  function handleViewModeChange(mode: ViewMode) {
+    setState(prev => ({ ...prev, viewMode: mode }))
+  }
+
   const isReady = state.isShopifyConnected && !!state.aiApiKey
 
   if (!mounted) {
@@ -475,6 +483,9 @@ export default function Home() {
       onChatMessage={handleChatMessage}
       onDisconnect={handleDisconnect}
       onSettingsUpdate={handleSettingsUpdate}
+      viewMode={state.viewMode}
+      onViewModeChange={handleViewModeChange}
+      previewRefreshKey={previewRefreshKey}
     />
   )
 }

@@ -2,10 +2,24 @@
 
 export type AIProvider = 'anthropic' | 'openai'
 
+export type ViewMode = 'code' | 'preview'
+
 export interface ShopifyTheme {
   id: string
   name: string
-  role: 'main' | 'unpublished' | 'demo'
+  role: 'main' | 'unpublished' | 'development' | 'demo' | 'archived' | 'locked'
+}
+
+export function themeRoleLabel(role: string): string {
+  switch (role) {
+    case 'main': return '(Live)'
+    case 'development': return '(Dev)'
+    case 'demo': return '(Demo)'
+    case 'unpublished': return '(Draft)'
+    case 'archived': return '(Archived)'
+    case 'locked': return '(Locked)'
+    default: return ''
+  }
 }
 
 export interface ThemeFile {
@@ -64,6 +78,9 @@ export interface AppState {
   // UI
   isLoading: boolean
   error: string | null
+
+  // View mode
+  viewMode: ViewMode
 }
 
 export type FileType = 'liquid' | 'css' | 'js' | 'json' | 'svg' | 'other'
