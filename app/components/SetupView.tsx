@@ -189,7 +189,7 @@ export default function SetupView({
         color: 'var(--text-muted)',
         letterSpacing: '0.05em',
       }}>
-        shopify \u00d7 ai
+        shopify × ai
       </div>
 
       {/* Main content */}
@@ -507,7 +507,7 @@ export default function SetupView({
 
             {keyValid === true && (
               <div style={{ color: 'var(--green)', fontSize: 11, marginBottom: 6 }}>
-                \u2713 API key saved
+                ✓ API key saved
               </div>
             )}
 
@@ -552,7 +552,7 @@ export default function SetupView({
           color: 'var(--text-disabled)',
           letterSpacing: '0.05em',
         }}>
-          requires shopify partner app \u00b7 anthropic, openai, or minimax account
+          requires shopify partner app · anthropic, openai, or minimax account
         </div>
       </div>
     </div>
