@@ -40,11 +40,11 @@ export default function CodeViewer({ filename, content }: CodeViewerProps) {
         <span style={{ fontSize: 11, color: fileColor, fontFamily: 'var(--font-mono)' }}>
           {fileType.toUpperCase()}
         </span>
-        <span style={{ color: 'var(--border-default)' }}>\u00b7</span>
+        <span style={{ color: 'var(--border-default)' }}>·</span>
         <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
           {lines.length} lines
         </span>
-        <span style={{ color: 'var(--border-default)' }}>\u00b7</span>
+        <span style={{ color: 'var(--border-default)' }}>·</span>
         <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
           {formatBytes(new TextEncoder().encode(content).length)}
         </span>
