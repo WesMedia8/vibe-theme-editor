@@ -553,7 +553,7 @@ function EmptyEditor({ hasFiles, hasTheme }: { hasFiles: boolean; hasTheme: bool
   {!hasTheme ? 'Select a theme to get started' : !hasFiles ? 'Loading theme files...' : 'Select a file from the sidebar'}
   </div>
   <div style={{ fontSize: 11, color: 'var(--text-disabled)' }}>
-  {hasFiles && 'Or ask AI to make changes in the chat \u2192'}
+  {hasFiles && 'Or just describe what you want in the chat \u2192'}
   </div>
   </div>
     </div>
