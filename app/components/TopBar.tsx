@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type { ShopifyTheme, AIProvider, ViewMode } from '../types'
+import { themeGidToId } from '../types'
 
 interface TopBarProps {
   shopDomain: string | null
@@ -16,6 +17,7 @@ interface TopBarProps {
   aiApiKey: string | null
   viewMode: ViewMode
   onViewModeChange: (mode: ViewMode) => void
+  editorWindowRef: React.MutableRefObject<Window | null>
 }
 
 const PROVIDER_OPTIONS: { value: AIProvider; label: string; prefix: string; placeholder: string }[] = [
@@ -36,11 +38,13 @@ export default function TopBar({
   aiApiKey,
   viewMode,
   onViewModeChange,
+  editorWindowRef,
 }: TopBarProps) {
   const [showSettings, setShowSettings] = useState(false)
   const [settingsProvider, setSettingsProvider] = useState<AIProvider>(aiProvider)
   const [newKey, setNewKey] = useState(aiApiKey || '')
   const [keySaved, setKeySaved] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(false)
 
   function handleOpenSettings() {
     setSettingsProvider(aiProvider)
@@ -56,6 +60,42 @@ export default function TopBar({
       setTimeout(() => setKeySaved(false), 2000)
     }
   }
+
+  // Build the Shopify admin theme editor URL
+  function buildEditorUrl(): string | null {
+    if (!shopDomain || !selectedTheme) return null
+    const numericId = themeGidToId(selectedTheme.id)
+    return `https://${shopDomain}/admin/themes/${numericId}/editor`
+  }
+
+  const editorUrl = buildEditorUrl()
+
+  // Open or focus editor
+  const openEditor = useCallback(() => {
+    if (!editorUrl) return
+    if (editorWindowRef.current && !editorWindowRef.current.closed) {
+      editorWindowRef.current.focus()
+      return
+    }
+    const win = window.open(editorUrl, 'shopify-theme-editor')
+    if (win) {
+      editorWindowRef.current = win
+      setEditorOpen(true)
+    }
+  }, [editorUrl, editorWindowRef])
+
+  // Poll editor window status
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (editorWindowRef.current && editorWindowRef.current.closed) {
+        setEditorOpen(false)
+        editorWindowRef.current = null
+      } else if (editorWindowRef.current && !editorWindowRef.current.closed) {
+        setEditorOpen(true)
+      }
+    }, 1500)
+    return () => clearInterval(interval)
+  }, [editorWindowRef])
 
   const activeOption = PROVIDER_OPTIONS.find(p => p.value === aiProvider)
 
@@ -215,6 +255,44 @@ export default function TopBar({
 
         {/* Right: Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {/* Theme Editor quick-launch button — always visible */}
+          {editorUrl && (
+            <button
+              onClick={openEditor}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '5px 10px',
+                background: editorOpen ? 'rgba(76, 175, 80, 0.06)' : 'rgba(0, 229, 255, 0.06)',
+                border: `1px solid ${editorOpen ? 'rgba(76, 175, 80, 0.25)' : 'rgba(0, 229, 255, 0.2)'}`,
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                fontWeight: 600,
+                color: editorOpen ? 'var(--green)' : 'var(--cyan)',
+                transition: 'all 0.15s ease',
+                flexShrink: 0,
+              }}
+              title={editorOpen ? 'Theme editor is open — click to focus' : 'Open the Shopify theme editor'}
+            >
+              <span style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: editorOpen ? 'var(--green)' : 'var(--cyan)',
+                boxShadow: editorOpen ? '0 0 6px rgba(76, 175, 80, 0.4)' : 'none',
+                animation: editorOpen ? undefined : 'pulse 2s ease-in-out infinite',
+                flexShrink: 0,
+              }} />
+              {editorOpen ? 'Editor Open' : 'Open Editor'}
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.7 }}>
+                <path d="M7 1h2v2M4.5 5.5L9 1M5.5 1H1.5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5V5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
+
           {/* Provider badge */}
           <div style={{
             display: 'flex',
