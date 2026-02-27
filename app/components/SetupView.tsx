@@ -469,7 +469,7 @@ export default function SetupView({
                     </svg>
                   ) : (
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <path d="M1 1l12 12M5.5 5.7A1.5 1.5 0 019 7M1.5 5C2.7 3.3 4.7 2.5 7 2.5M12.5 9A9.6 9.6 0 017 11.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                      <path d="M1 1l12 12M5.5 5.7A1.5 1.5 0 009 7M1.5 5C2.7 3.3 4.7 2.5 7 2.5M12.5 9A9.6 9.6 0 017 11.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
                     </svg>
                   )}
                 </button>

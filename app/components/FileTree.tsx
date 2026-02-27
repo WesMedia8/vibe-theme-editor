@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import type { ShopifyTheme, ThemeFile } from '../types'
-import { getFileType, getFileColor } from '../types'
+import { getFileType, getFileColor, themeRoleLabel } from '../types'
 
 interface FileTreeProps {
   themes: ShopifyTheme[]
@@ -65,22 +65,22 @@ function buildTree(files: ThemeFile[]): TreeNode[] {
 }
 
 const FILE_ICONS: Record<string, string> = {
-  liquid: '\u25c8',
-  css: '\u25c9',
-  js: '\u25c6',
-  json: '\u25c7',
-  svg: '\u25ce',
-  other: '\u00b7',
+  liquid: '◈',
+  css: '◉',
+  js: '◆',
+  json: '◇',
+  svg: '◎',
+  other: '·',
 }
 
 const DIR_ICONS: Record<string, string> = {
-  layout: '\u2b21',
-  templates: '\u2b22',
-  sections: '\u2b23',
-  snippets: '\u2b24',
-  assets: '\u25c8',
-  config: '\u2699',
-  locales: '\u25f7',
+  layout: '⬡',
+  templates: '⬢',
+  sections: '⬣',
+  snippets: '⬤',
+  assets: '◈',
+  config: '⚙',
+  locales: '◷',
 }
 
 export default function FileTree({
@@ -172,11 +172,14 @@ export default function FileTree({
           {themes.length === 0 && (
             <option value="">No themes found</option>
           )}
-          {themes.map(theme => (
-            <option key={theme.id} value={theme.id}>
-              {theme.name}{theme.role === 'main' ? ' (live)' : ''}
-            </option>
-          ))}
+          {themes.map(theme => {
+            const roleLabel = themeRoleLabel(theme.role)
+            return (
+              <option key={theme.id} value={theme.id}>
+                {theme.name}{roleLabel ? ` ${roleLabel}` : ''}
+              </option>
+            )
+          })}
         </select>
       </div>
 
@@ -350,7 +353,7 @@ function TreeEntry({
             transition: 'transform 0.15s ease',
             display: 'inline-block',
           }}>
-            \u25be
+            ▾
           </span>
         )}
 
@@ -364,8 +367,8 @@ function TreeEntry({
           opacity: node.isDir ? 0.7 : 1,
         }}>
           {node.isDir
-            ? (DIR_ICONS[node.name] || '\u25b8')
-            : (FILE_ICONS[fileType] || '\u00b7')}
+            ? (DIR_ICONS[node.name] || '▸')
+            : (FILE_ICONS[fileType] || '·')}
         </span>
 
         {/* Name */}

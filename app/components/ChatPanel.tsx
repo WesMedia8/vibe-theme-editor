@@ -13,6 +13,7 @@ interface ChatPanelProps {
   isPushing: boolean
   selectedThemeName: string | null
   aiProvider: AIProvider
+  onOpenFile: (filename: string) => void
 }
 
 const EXAMPLE_PROMPTS = [
@@ -37,6 +38,7 @@ export default function ChatPanel({
   isPushing,
   selectedThemeName,
   aiProvider,
+  onOpenFile,
 }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -132,7 +134,7 @@ export default function ChatPanel({
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {messages.map(message => (
-              <MessageBubble key={message.id} message={message} />
+              <MessageBubble key={message.id} message={message} onOpenFile={onOpenFile} />
             ))}
             <div ref={messagesEndRef} />
           </div>
@@ -287,7 +289,12 @@ export default function ChatPanel({
   )
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+interface MessageBubbleProps {
+  message: ChatMessage
+  onOpenFile: (filename: string) => void
+}
+
+function MessageBubble({ message, onOpenFile }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   
   // Remove file_change blocks from display
@@ -336,30 +343,16 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         )}
       </div>
 
-      {/* File change badges */}
+      {/* File change cards — collapsible */}
       {message.fileChanges && message.fileChanges.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: '90%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: '90%', width: '100%' }}>
           {message.fileChanges.map(fc => (
-            <div
+            <FileChangeCard
               key={fc.filename}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                background: 'var(--amber-muted)',
-                border: '1px solid rgba(255, 184, 0, 0.2)',
-                borderRadius: 4,
-                padding: '2px 8px',
-                fontSize: 10,
-                color: 'var(--amber)',
-                fontFamily: 'var(--font-mono)',
-              }}
-            >
-              <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
-                <path d="M1 8L8 1M8 1H4.5M8 1V4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              {fc.filename}
-            </div>
+              filename={fc.filename}
+              content={fc.content}
+              onOpenFile={onOpenFile}
+            />
           ))}
         </div>
       )}
@@ -372,6 +365,153 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       }}>
         {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </div>
+    </div>
+  )
+}
+
+interface FileChangeCardProps {
+  filename: string
+  content: string
+  onOpenFile: (filename: string) => void
+}
+
+function FileChangeCard({ filename, content, onOpenFile }: FileChangeCardProps) {
+  const [expanded, setExpanded] = useState(false)
+
+  // Get first 5 non-empty lines for preview
+  const previewLines = content
+    .split('\n')
+    .filter(l => l.trim().length > 0)
+    .slice(0, 5)
+
+  const parts = filename.split('/')
+  const basename = parts[parts.length - 1]
+
+  return (
+    <div style={{
+      background: 'var(--bg-base)',
+      border: '1px solid rgba(255, 184, 0, 0.2)',
+      borderRadius: 6,
+      overflow: 'hidden',
+    }}>
+      {/* Card header — clickable to toggle */}
+      <button
+        onClick={() => setExpanded(e => !e)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '6px 10px',
+          background: 'var(--amber-muted)',
+          border: 'none',
+          borderBottom: expanded ? '1px solid rgba(255, 184, 0, 0.15)' : 'none',
+          cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ flexShrink: 0 }}>
+          <path d="M1 8L8 1M8 1H4.5M8 1V4.5" stroke="var(--amber)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <span style={{
+          flex: 1,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: 'var(--amber)',
+          fontWeight: 600,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {filename}
+        </span>
+        {/* Expand/collapse chevron */}
+        <svg
+          width="9"
+          height="9"
+          viewBox="0 0 9 9"
+          fill="none"
+          style={{
+            flexShrink: 0,
+            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.15s ease',
+          }}
+        >
+          <path d="M1.5 3L4.5 6L7.5 3" stroke="var(--amber)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div>
+          {/* Code preview */}
+          <div style={{
+            padding: '8px 10px',
+            background: 'var(--bg-base)',
+          }}>
+            <pre style={{
+              margin: 0,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10.5,
+              color: 'var(--text-secondary)',
+              lineHeight: 1.6,
+              overflow: 'hidden',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+            }}>
+              {previewLines.map((line, i) => (
+                <div key={i} style={{
+                  display: 'flex',
+                  gap: 8,
+                }}>
+                  <span style={{ color: 'var(--text-disabled)', userSelect: 'none', minWidth: 14 }}>
+                    {i + 1}
+                  </span>
+                  <span>{line}</span>
+                </div>
+              ))}
+              {content.split('\n').filter(l => l.trim().length > 0).length > 5 && (
+                <div style={{ color: 'var(--text-disabled)', marginTop: 4 }}>
+                  … {content.split('\n').filter(l => l.trim().length > 0).length - 5} more lines
+                </div>
+              )}
+            </pre>
+          </div>
+
+          {/* View in editor link */}
+          <div style={{
+            padding: '6px 10px',
+            borderTop: '1px solid var(--border-subtle)',
+            display: 'flex',
+            justifyContent: 'flex-end',
+          }}>
+            <button
+              onClick={() => onOpenFile(filename)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                color: 'var(--cyan)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                fontWeight: 600,
+                padding: 0,
+                transition: 'opacity 0.12s ease',
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = '0.7'}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = '1'}
+            >
+              View in Editor
+              <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                <path d="M1 5.5h7M5 2.5L8 5.5 5 8.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
