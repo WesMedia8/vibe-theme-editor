@@ -44,7 +44,7 @@ When the user asks for theme changes:
 </file_change>
 
 **CRITICAL RULES:**
-- Always include the COMPLETE file content \u2014 never partial snippets with \"...\" placeholders
+- Always include the COMPLETE file content — never partial snippets with \"...\" placeholders
 - You can include multiple <file_change> blocks if modifying multiple files
 - If you need to see a file's content that hasn't been shared, ask the user to open it first
 - Preserve all existing functionality unless explicitly asked to change it
