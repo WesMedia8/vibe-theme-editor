@@ -1,6 +1,6 @@
 // Shared types for Vibe Theme Editor
 
-export type AIProvider = 'anthropic' | 'openai'
+export type AIProvider = 'anthropic' | 'openai' | 'minimax'
 
 export type ViewMode = 'code' | 'preview'
 
