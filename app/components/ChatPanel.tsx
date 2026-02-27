@@ -20,7 +20,7 @@ const EXAMPLE_PROMPTS = [
   "Make the header background dark navy with white text",
   "Add a sticky announcement bar at the top in amber",
   "Make all buttons have rounded corners and a subtle shadow",
-  "Show me the current header.liquid file",
+  "Change the product page layout to show images on the left",
 ]
 
 const PROVIDER_DISPLAY: Record<AIProvider, { label: string; color: string }> = {
@@ -559,14 +559,14 @@ function EmptyState({ onPromptClick }: { onPromptClick: (text: string) => void }
           color: 'var(--text-primary)',
           marginBottom: 6,
         }}>
-          Ask AI to edit your theme
+          Just tell me what to change
         </div>
         <div style={{
           fontSize: 12,
           color: 'var(--text-muted)',
           lineHeight: 1.5,
         }}>
-          Open files from the sidebar, then describe<br/>changes in natural language.
+          Describe what you want and I'll find the right<br/>files and make the changes for you.
         </div>
       </div>
 
