@@ -25,6 +25,113 @@ function createInitialState(): AppState {
   }
 }
 
+// Smart file matching: given a user prompt, find the most relevant theme files
+function findRelevantFiles(prompt: string, themeFiles: ThemeFile[]): string[] {
+  const lower = prompt.toLowerCase()
+  const matched = new Set<string>()
+
+  // Keyword-to-file mappings for common Shopify theme concepts
+  const keywordMap: Record<string, string[]> = {
+    'header': ['sections/header.liquid', 'snippets/header-*.liquid', 'layout/theme.liquid'],
+    'footer': ['sections/footer.liquid', 'snippets/footer-*.liquid'],
+    'nav': ['sections/header.liquid', 'snippets/header-*.liquid', 'snippets/menu-*.liquid'],
+    'navigation': ['sections/header.liquid', 'snippets/header-*.liquid', 'snippets/menu-*.liquid'],
+    'menu': ['sections/header.liquid', 'snippets/header-*.liquid', 'snippets/menu-*.liquid'],
+    'cart': ['sections/cart-*.liquid', 'snippets/cart-*.liquid', 'templates/cart.json', 'assets/cart.js'],
+    'product': ['sections/main-product.liquid', 'sections/product-*.liquid', 'snippets/product-*.liquid', 'snippets/price.liquid', 'templates/product.json'],
+    'collection': ['sections/main-collection-*.liquid', 'sections/collection-*.liquid', 'templates/collection.json'],
+    'announcement': ['sections/announcement-bar.liquid', 'sections/header.liquid'],
+    'banner': ['sections/announcement-bar.liquid', 'sections/image-banner.liquid', 'sections/slideshow.liquid'],
+    'hero': ['sections/image-banner.liquid', 'sections/slideshow.liquid', 'sections/rich-text.liquid'],
+    'font': ['sections/header.liquid', 'layout/theme.liquid', 'config/settings_schema.json', 'assets/base.css'],
+    'color': ['config/settings_schema.json', 'config/settings_data.json', 'assets/base.css', 'layout/theme.liquid'],
+    'button': ['assets/base.css', 'assets/section-*.css', 'snippets/price.liquid'],
+    'style': ['assets/base.css', 'assets/section-*.css', 'layout/theme.liquid'],
+    'css': ['assets/base.css', 'assets/section-*.css'],
+    'layout': ['layout/theme.liquid', 'layout/password.liquid'],
+    'template': ['layout/theme.liquid'],
+    'blog': ['sections/main-blog.liquid', 'sections/blog-post.liquid', 'templates/blog.json', 'templates/article.json'],
+    'article': ['sections/main-article.liquid', 'templates/article.json'],
+    'page': ['sections/main-page.liquid', 'templates/page.json'],
+    'search': ['sections/main-search.liquid', 'templates/search.json'],
+    'contact': ['sections/contact-form.liquid', 'templates/page.contact.json'],
+    'login': ['templates/customers/login.json', 'sections/main-login.liquid'],
+    'account': ['templates/customers/account.json', 'sections/main-account.liquid'],
+    'checkout': ['layout/checkout.liquid'],
+    'password': ['layout/password.liquid', 'templates/password.json'],
+    '404': ['templates/404.json', 'sections/main-404.liquid'],
+    'gift': ['templates/gift_card.liquid'],
+    'featured': ['sections/featured-collection.liquid', 'sections/featured-product.liquid'],
+    'newsletter': ['sections/newsletter.liquid', 'snippets/newsletter-*.liquid'],
+    'popup': ['sections/popup.liquid', 'snippets/popup-*.liquid'],
+    'slider': ['sections/slideshow.liquid', 'sections/image-banner.liquid'],
+    'slideshow': ['sections/slideshow.liquid'],
+    'testimonial': ['sections/testimonials.liquid', 'sections/multicolumn.liquid'],
+    'image': ['sections/image-banner.liquid', 'sections/image-with-text.liquid'],
+    'video': ['sections/video.liquid', 'sections/video-*.liquid'],
+    'rich text': ['sections/rich-text.liquid'],
+    'multicolumn': ['sections/multicolumn.liquid'],
+    'collapsible': ['sections/collapsible-content.liquid'],
+    'faq': ['sections/collapsible-content.liquid'],
+    'settings': ['config/settings_schema.json', 'config/settings_data.json'],
+    'icon': ['snippets/icon-*.liquid'],
+    'social': ['snippets/social-icons.liquid', 'sections/footer.liquid'],
+    'seo': ['snippets/seo.liquid', 'layout/theme.liquid'],
+    'meta': ['snippets/meta-*.liquid', 'layout/theme.liquid'],
+  }
+
+  // Check each keyword
+  for (const [keyword, patterns] of Object.entries(keywordMap)) {
+    if (lower.includes(keyword)) {
+      for (const pattern of patterns) {
+        if (pattern.includes('*')) {
+          // Wildcard match
+          const prefix = pattern.split('*')[0]
+          for (const file of themeFiles) {
+            if (file.filename.startsWith(prefix) && file.contentType !== 'ASSET' && file.size < 100000) {
+              matched.add(file.filename)
+            }
+          }
+        } else {
+          // Exact match — check if file exists
+          if (themeFiles.find(f => f.filename === pattern)) {
+            matched.add(pattern)
+          }
+        }
+      }
+    }
+  }
+
+  // Also check if the user mentions a specific filename
+  for (const file of themeFiles) {
+    const basename = file.filename.split('/').pop() || ''
+    const nameNoExt = basename.replace(/\.\w+$/, '')
+    if (lower.includes(basename.toLowerCase()) || lower.includes(nameNoExt.toLowerCase())) {
+      matched.add(file.filename)
+    }
+  }
+
+  // If nothing matched, include core layout + CSS as fallback
+  if (matched.size === 0) {
+    const fallbacks = ['layout/theme.liquid', 'assets/base.css', 'config/settings_data.json']
+    for (const f of fallbacks) {
+      if (themeFiles.find(tf => tf.filename === f)) {
+        matched.add(f)
+      }
+    }
+  }
+
+  // Limit to 10 files to avoid context overflow, prioritize .liquid and .css files
+  const sorted = Array.from(matched).sort((a, b) => {
+    // Prioritize files that are more likely to be relevant
+    const aScore = a.endsWith('.liquid') ? 0 : a.endsWith('.css') ? 1 : a.endsWith('.json') ? 2 : 3
+    const bScore = b.endsWith('.liquid') ? 0 : b.endsWith('.css') ? 1 : b.endsWith('.json') ? 2 : 3
+    return aScore - bScore
+  })
+
+  return sorted.slice(0, 10)
+}
+
 export default function Home() {
   const [state, setState] = useState<AppState>(createInitialState)
   const [mounted, setMounted] = useState(false)
@@ -147,6 +254,51 @@ export default function Home() {
     } catch (err) {
       console.error('Failed to load file content:', err)
     }
+  }
+
+  // Fetch multiple file contents at once (for auto-context)
+  async function fetchFileContents(filenames: string[]): Promise<Array<{ filename: string; content: string }>> {
+    if (!state.selectedTheme || filenames.length === 0) return []
+
+    // Filter out files we already have cached
+    const needed = filenames.filter(f => !state.fileContents.has(f))
+    const cached = filenames
+      .filter(f => state.fileContents.has(f))
+      .map(f => ({ filename: f, content: state.fileContents.get(f)! }))
+
+    if (needed.length === 0) return cached
+
+    try {
+      const res = await fetch('/api/theme-file-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          themeId: state.selectedTheme.id,
+          filenames: needed,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const fetched: Array<{ filename: string; content: string }> = data.files || []
+
+        // Cache the fetched files
+        if (fetched.length > 0) {
+          setState(prev => {
+            const newContents = new Map(prev.fileContents)
+            for (const f of fetched) {
+              newContents.set(f.filename, f.content)
+            }
+            return { ...prev, fileContents: newContents }
+          })
+        }
+
+        return [...cached, ...fetched]
+      }
+    } catch (err) {
+      console.error('Failed to fetch file contents:', err)
+    }
+
+    return cached
   }
 
   function handleProviderChange(provider: AIProvider) {
@@ -284,15 +436,32 @@ export default function Home() {
       messages: [...prev.messages, userMsg, assistantMsg],
     }))
 
-    // Build context: include content of open files (up to a reasonable limit)
-    const contextFiles: Array<{ filename: string; content: string }> = []
-    const filesToInclude = state.openFiles.slice(0, 5)
-    for (const filename of filesToInclude) {
-      const content = state.fileContents.get(filename)
-      if (content) {
-        contextFiles.push({ filename, content: content.slice(0, 8000) })
-      }
-    }
+    // Auto-fetch relevant files based on the user's prompt
+    const relevantFilenames = findRelevantFiles(content, state.themeFiles)
+
+    // Also include any manually opened files
+    const openFileContents = state.openFiles.slice(0, 5).map(f => ({
+      filename: f,
+      content: state.fileContents.get(f) || '',
+    })).filter(f => f.content)
+
+    // Merge: auto-fetched + manually opened, deduplicated
+    const alreadyIncluded = new Set(openFileContents.map(f => f.filename))
+    const filesToFetch = relevantFilenames.filter(f => !alreadyIncluded.has(f))
+
+    // Fetch the auto-detected files
+    const autoFetched = await fetchFileContents(filesToFetch)
+
+    // Combine all context files
+    const contextFiles = [...openFileContents, ...autoFetched]
+      .filter(f => f.content)
+      .slice(0, 12) // Cap at 12 files
+      .map(f => ({ filename: f.filename, content: f.content.slice(0, 8000) }))
+
+    // Build the full theme filename list
+    const allThemeFilenames = state.themeFiles
+      .filter(f => f.contentType !== 'ASSET' || f.filename.endsWith('.css') || f.filename.endsWith('.js'))
+      .map(f => f.filename)
 
     try {
       const res = await fetch('/api/chat', {
@@ -306,6 +475,7 @@ export default function Home() {
           apiKey: state.aiApiKey,
           provider: state.aiProvider,
           themeFiles: contextFiles,
+          allThemeFilenames,
         }),
       })
 
