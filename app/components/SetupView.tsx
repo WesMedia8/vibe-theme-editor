@@ -274,7 +274,7 @@ export default function SetupView({
                 color: isShopifyConnected ? 'var(--green)' : 'var(--text-muted)',
                 flexShrink: 0,
               }}>
-                {isShopifyConnected ? '\u2713' : '1'}
+                {isShopifyConnected ? '✓' : '1'}
               </div>
               <span style={{
                 fontSize: 13,
@@ -370,7 +370,7 @@ export default function SetupView({
                 color: keyValid === true ? 'var(--cyan)' : 'var(--text-muted)',
                 flexShrink: 0,
               }}>
-                {keyValid === true ? '\u2713' : '2'}
+                {keyValid === true ? '✓' : '2'}
               </div>
               <span style={{
                 fontSize: 13,
@@ -491,7 +491,7 @@ export default function SetupView({
 
             {keyValid === true && (
               <div style={{ color: 'var(--green)', fontSize: 11, marginBottom: 6 }}>
-                \u2713 API key saved
+                ✓ API key saved
               </div>
             )}
 
@@ -536,7 +536,7 @@ export default function SetupView({
           color: 'var(--text-disabled)',
           letterSpacing: '0.05em',
         }}>
-          requires shopify partner app \u00b7 anthropic or openai account
+          requires shopify partner app · anthropic or openai account
         </div>
       </div>
     </div>

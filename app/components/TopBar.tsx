@@ -392,7 +392,7 @@ export default function TopBar({
                   onClick={handleSaveKey}
                   style={{ flexShrink: 0, color: keySaved ? 'var(--green)' : undefined }}
                 >
-                  {keySaved ? '\u2713 Saved' : 'Update'}
+                  {keySaved ? '✓ Saved' : 'Update'}
                 </button>
               </div>
             </div>
