@@ -12,12 +12,15 @@ export async function GET() {
 
   const query = `
     query ThemeList {
-      themes(first: 20) {
+      themes(first: 50, reverse: true) {
         edges {
           node {
             id
             name
             role
+            createdAt
+            updatedAt
+            processing
           }
         }
       }
@@ -51,12 +54,21 @@ export async function GET() {
     }
 
     const themes = (data.data?.themes?.edges || []).map((edge: {
-      node: { id: string; name: string; role: string }
+      node: { id: string; name: string; role: string; createdAt: string; updatedAt: string; processing: boolean }
     }) => ({
       id: edge.node.id,
       name: edge.node.name,
       role: edge.node.role.toLowerCase(),
+      createdAt: edge.node.createdAt,
+      updatedAt: edge.node.updatedAt,
+      processing: edge.node.processing,
     }))
+
+    themes.sort((a: { role: string; updatedAt: string }, b: { role: string; updatedAt: string }) => {
+      if (a.role === 'main' && b.role !== 'main') return -1
+      if (b.role === 'main' && a.role !== 'main') return 1
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    })
 
     return NextResponse.json({ themes })
   } catch (err) {
