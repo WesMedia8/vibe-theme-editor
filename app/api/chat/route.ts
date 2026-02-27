@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
+const MINIMAX_API_URL = 'https://api.minimax.io/v1/chat/completions'
 
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514'
 const DEFAULT_OPENAI_MODEL = 'gpt-4o'
+const DEFAULT_MINIMAX_MODEL = 'MiniMax-M2.5'
 
 interface FileContext {
   filename: string
@@ -16,7 +18,7 @@ interface Message {
   content: string
 }
 
-type Provider = 'anthropic' | 'openai'
+type Provider = 'anthropic' | 'openai' | 'minimax'
 
 function buildSystemPrompt(themeFiles: FileContext[]): string {
   let prompt = `You are an expert Shopify theme developer with deep knowledge of Liquid templating, CSS, JavaScript, and Shopify's theme architecture.
@@ -42,7 +44,7 @@ When the user asks for theme changes:
 </file_change>
 
 **CRITICAL RULES:**
-- Always include the COMPLETE file content — never partial snippets with "..." placeholders
+- Always include the COMPLETE file content \u2014 never partial snippets with \"...\" placeholders
 - You can include multiple <file_change> blocks if modifying multiple files
 - If you need to see a file's content that hasn't been shared, ask the user to open it first
 - Preserve all existing functionality unless explicitly asked to change it
@@ -96,7 +98,6 @@ async function handleAnthropic(apiKey: string, model: string, systemPrompt: stri
     return NextResponse.json({ error: errMsg }, { status: res.status })
   }
 
-  // Stream through directly — Anthropic SSE format
   const { readable, writable } = new TransformStream()
   const writer = writable.getWriter()
   const encoder = new TextEncoder()
@@ -128,8 +129,8 @@ async function handleAnthropic(apiKey: string, model: string, systemPrompt: stri
   })
 }
 
-async function handleOpenAI(apiKey: string, model: string, systemPrompt: string, messages: Message[]) {
-  const res = await fetch(OPENAI_API_URL, {
+async function handleOpenAICompatible(apiKey: string, model: string, systemPrompt: string, messages: Message[], apiUrl: string, providerName: string) {
+  const res = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -148,10 +149,10 @@ async function handleOpenAI(apiKey: string, model: string, systemPrompt: string,
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}))
-    const errMsg = (errData as { error?: { message?: string } }).error?.message || `OpenAI API error: ${res.status}`
+    const errMsg = (errData as { error?: { message?: string } }).error?.message || `${providerName} API error: ${res.status}`
 
     if (res.status === 401) {
-      return NextResponse.json({ error: 'Invalid API key. Please check your OpenAI API key.' }, { status: 401 })
+      return NextResponse.json({ error: `Invalid API key. Please check your ${providerName} API key.` }, { status: 401 })
     }
     if (res.status === 429) {
       return NextResponse.json({ error: 'Rate limit exceeded. Please try again in a moment.' }, { status: 429 })
@@ -160,7 +161,7 @@ async function handleOpenAI(apiKey: string, model: string, systemPrompt: string,
     return NextResponse.json({ error: errMsg }, { status: res.status })
   }
 
-  // Transform OpenAI SSE format to match Anthropic's format so the client parser works uniformly
+  // Transform OpenAI-compatible SSE format to Anthropic format so the client parser works uniformly
   const { readable, writable } = new TransformStream()
   const writer = writable.getWriter()
   const encoder = new TextEncoder()
@@ -190,7 +191,6 @@ async function handleOpenAI(apiKey: string, model: string, systemPrompt: string,
               const parsed = JSON.parse(data)
               const delta = parsed.choices?.[0]?.delta
               if (delta?.content) {
-                // Re-emit as Anthropic-style content_block_delta
                 const anthropicEvent = {
                   type: 'content_block_delta',
                   delta: { type: 'text_delta', text: delta.content },
@@ -204,7 +204,7 @@ async function handleOpenAI(apiKey: string, model: string, systemPrompt: string,
         }
       }
     } catch (err) {
-      console.error('OpenAI stream error:', err)
+      console.error(`${providerName} stream error:`, err)
     } finally {
       await writer.close()
     }
@@ -236,7 +236,13 @@ export async function POST(request: NextRequest) {
   }
 
   const { messages, apiKey, themeFiles = [], provider = 'anthropic' } = body
-  const model = body.model || (provider === 'openai' ? DEFAULT_OPENAI_MODEL : DEFAULT_ANTHROPIC_MODEL)
+
+  let model = body.model
+  if (!model) {
+    if (provider === 'openai') model = DEFAULT_OPENAI_MODEL
+    else if (provider === 'minimax') model = DEFAULT_MINIMAX_MODEL
+    else model = DEFAULT_ANTHROPIC_MODEL
+  }
 
   if (!apiKey) {
     return NextResponse.json({ error: 'Missing API key' }, { status: 400 })
@@ -250,12 +256,15 @@ export async function POST(request: NextRequest) {
 
   try {
     if (provider === 'openai') {
-      return await handleOpenAI(apiKey, model, systemPrompt, messages)
+      return await handleOpenAICompatible(apiKey, model, systemPrompt, messages, OPENAI_API_URL, 'OpenAI')
+    } else if (provider === 'minimax') {
+      return await handleOpenAICompatible(apiKey, model, systemPrompt, messages, MINIMAX_API_URL, 'MiniMax')
     } else {
       return await handleAnthropic(apiKey, model, systemPrompt, messages)
     }
   } catch (err) {
     console.error('Chat API error:', err)
-    return NextResponse.json({ error: `Failed to connect to ${provider === 'openai' ? 'OpenAI' : 'Anthropic'} API` }, { status: 500 })
+    const name = provider === 'openai' ? 'OpenAI' : provider === 'minimax' ? 'MiniMax' : 'Anthropic'
+    return NextResponse.json({ error: `Failed to connect to ${name} API` }, { status: 500 })
   }
 }
