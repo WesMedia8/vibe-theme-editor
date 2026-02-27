@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { ShopifyTheme } from '../types'
 import { themeGidToId } from '../types'
 
@@ -12,12 +12,14 @@ interface PreviewPanelProps {
 
 export default function PreviewPanel({ shopDomain, selectedTheme, refreshKey }: PreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const editorWindowRef = useRef<Window | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadKey, setLoadKey] = useState(0)
   const [deviceMode, setDeviceMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
+  const [editorOpen, setEditorOpen] = useState(false)
 
-  // Build the proxy URL
+  // Build the proxy URL for storefront preview
   function buildProxyUrl(): string | null {
     if (!shopDomain) return null
     let url = '/api/preview-proxy'
@@ -35,7 +37,7 @@ export default function PreviewPanel({ shopDomain, selectedTheme, refreshKey }: 
     return `https://${shopDomain}/admin/themes/${numericId}/editor`
   }
 
-  // Build the storefront URL for "Open Site" 
+  // Build the storefront URL for "Open Site"
   function buildStorefrontUrl(): string | null {
     if (!shopDomain) return null
     const base = `https://${shopDomain}`
@@ -47,6 +49,40 @@ export default function PreviewPanel({ shopDomain, selectedTheme, refreshKey }: 
   const proxyUrl = buildProxyUrl()
   const editorUrl = buildEditorUrl()
   const storefrontUrl = buildStorefrontUrl()
+
+  // Auto-open the theme editor when this panel mounts (user switched to Preview tab)
+  const openEditor = useCallback(() => {
+    if (!editorUrl) return
+    // Check if the window is still open
+    if (editorWindowRef.current && !editorWindowRef.current.closed) {
+      editorWindowRef.current.focus()
+      setEditorOpen(true)
+      return
+    }
+    const win = window.open(editorUrl, 'shopify-theme-editor')
+    if (win) {
+      editorWindowRef.current = win
+      setEditorOpen(true)
+    }
+  }, [editorUrl])
+
+  // Auto-open on mount
+  useEffect(() => {
+    if (editorUrl) {
+      openEditor()
+    }
+  }, [editorUrl, openEditor])
+
+  // Poll to detect if editor window was closed
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (editorWindowRef.current && editorWindowRef.current.closed) {
+        setEditorOpen(false)
+        editorWindowRef.current = null
+      }
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Reload when refreshKey changes (push happened)
   useEffect(() => {
@@ -61,10 +97,6 @@ export default function PreviewPanel({ shopDomain, selectedTheme, refreshKey }: 
     setLoadKey(k => k + 1)
     setIsLoading(true)
     setLoadError(null)
-  }
-
-  function handleOpenEditor() {
-    if (editorUrl) window.open(editorUrl, '_blank')
   }
 
   function handleOpenSite() {
@@ -136,9 +168,43 @@ export default function PreviewPanel({ shopDomain, selectedTheme, refreshKey }: 
               fontSize: 10,
               color: 'var(--text-muted)',
             }}>
-              · {selectedTheme.name}
+              \u00b7 {selectedTheme.name}
             </span>
           )}
+        </div>
+
+        {/* Theme Editor status indicator */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          padding: '3px 10px',
+          background: editorOpen ? 'rgba(76, 175, 80, 0.08)' : 'rgba(255, 184, 0, 0.08)',
+          border: `1px solid ${editorOpen ? 'rgba(76, 175, 80, 0.25)' : 'rgba(255, 184, 0, 0.25)'}`,
+          borderRadius: 'var(--radius-sm)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          fontWeight: 600,
+          color: editorOpen ? 'var(--green)' : 'var(--amber)',
+          cursor: 'pointer',
+          transition: 'all 0.12s ease',
+          flexShrink: 0,
+          letterSpacing: '0.02em',
+        }}
+        onClick={openEditor}
+        title={editorOpen ? 'Theme editor is open \u2014 click to focus' : 'Click to open the Shopify theme editor'}
+        >
+          <span style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            background: editorOpen ? 'var(--green)' : 'var(--amber)',
+            animation: editorOpen ? undefined : 'pulse 2s ease-in-out infinite',
+          }} />
+          {editorOpen ? 'Theme Editor Open' : 'Open Theme Editor'}
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.7 }}>
+            <path d="M7 1h2v2M4.5 5.5L9 1M5.5 1H1.5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5V5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
         </div>
 
         {/* Device mode toggles */}
@@ -212,46 +278,6 @@ export default function PreviewPanel({ shopDomain, selectedTheme, refreshKey }: 
           }
           label="Open Site"
         />
-
-        {/* Open Theme Editor - prominent button */}
-        <button
-          onClick={handleOpenEditor}
-          disabled={!editorUrl}
-          style={{
-            background: 'rgba(0, 229, 255, 0.08)',
-            border: '1px solid rgba(0, 229, 255, 0.25)',
-            borderRadius: 'var(--radius-sm)',
-            cursor: editorUrl ? 'pointer' : 'not-allowed',
-            color: 'var(--cyan)',
-            padding: '3px 10px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            fontWeight: 600,
-            transition: 'all 0.12s ease',
-            flexShrink: 0,
-            opacity: editorUrl ? 1 : 0.4,
-            letterSpacing: '0.02em',
-          }}
-          onMouseEnter={e => {
-            if (editorUrl) {
-              (e.currentTarget as HTMLElement).style.background = 'rgba(0, 229, 255, 0.15)'
-              ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(0, 229, 255, 0.4)'
-            }
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.background = 'rgba(0, 229, 255, 0.08)'
-            ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(0, 229, 255, 0.25)'
-          }}
-          title="Open the Shopify theme customizer in a new tab"
-        >
-          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-            <path d="M8 1.5h1.5V3M5 6L9.5 1.5M6 1.5H2a1 1 0 0 0-1 1v6.5a1 1 0 0 0 1 1h6.5a1 1 0 0 0 1-1V5.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          Theme Editor
-        </button>
       </div>
 
       {/* Preview area */}
@@ -268,7 +294,7 @@ export default function PreviewPanel({ shopDomain, selectedTheme, refreshKey }: 
         {!proxyUrl ? (
           <NoStoreView />
         ) : loadError ? (
-          <ErrorView error={loadError} onRetry={handleManualRefresh} editorUrl={editorUrl} />
+          <ErrorView error={loadError} onRetry={handleManualRefresh} onOpenEditor={openEditor} />
         ) : (
           <>
             {/* Loading overlay */}
@@ -450,7 +476,7 @@ function NoStoreView() {
   )
 }
 
-function ErrorView({ error, onRetry, editorUrl }: { error: string; onRetry: () => void; editorUrl: string | null }) {
+function ErrorView({ error, onRetry, onOpenEditor }: { error: string; onRetry: () => void; onOpenEditor: () => void }) {
   return (
     <div style={{
       height: '100%',
@@ -491,24 +517,22 @@ function ErrorView({ error, onRetry, editorUrl }: { error: string; onRetry: () =
         >
           Retry
         </button>
-        {editorUrl && (
-          <button
-            onClick={() => window.open(editorUrl, '_blank')}
-            style={{
-              background: 'rgba(0, 229, 255, 0.08)',
-              border: '1px solid rgba(0, 229, 255, 0.25)',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
-              color: 'var(--cyan)',
-              padding: '6px 14px',
-              fontSize: 11,
-              fontFamily: 'var(--font-mono)',
-              fontWeight: 600,
-            }}
-          >
-            Open Theme Editor
-          </button>
-        )}
+        <button
+          onClick={onOpenEditor}
+          style={{
+            background: 'rgba(0, 229, 255, 0.08)',
+            border: '1px solid rgba(0, 229, 255, 0.25)',
+            borderRadius: 'var(--radius-md)',
+            cursor: 'pointer',
+            color: 'var(--cyan)',
+            padding: '6px 14px',
+            fontSize: 11,
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 600,
+          }}
+        >
+          Open Theme Editor
+        </button>
       </div>
     </div>
   )
