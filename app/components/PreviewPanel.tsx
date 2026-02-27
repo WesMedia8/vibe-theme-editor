@@ -8,52 +8,23 @@ interface PreviewPanelProps {
   shopDomain: string | null
   selectedTheme: ShopifyTheme | null
   refreshKey: number
+  editorWindowRef: React.MutableRefObject<Window | null>
 }
 
-export default function PreviewPanel({ shopDomain, selectedTheme, refreshKey }: PreviewPanelProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  const editorWindowRef = useRef<Window | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [loadKey, setLoadKey] = useState(0)
-  const [deviceMode, setDeviceMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
+export default function PreviewPanel({ shopDomain, selectedTheme, refreshKey, editorWindowRef }: PreviewPanelProps) {
   const [editorOpen, setEditorOpen] = useState(false)
+  const [hasLaunched, setHasLaunched] = useState(false)
 
-  // Build the proxy URL for storefront preview
-  function buildProxyUrl(): string | null {
-    if (!shopDomain) return null
-    let url = '/api/preview-proxy'
-    if (selectedTheme && selectedTheme.role !== 'main') {
-      const numericId = themeGidToId(selectedTheme.id)
-      url += `?themeId=${numericId}`
-    }
-    return url
-  }
-
-  // Build the Shopify admin theme editor URL
   function buildEditorUrl(): string | null {
     if (!shopDomain || !selectedTheme) return null
     const numericId = themeGidToId(selectedTheme.id)
     return `https://${shopDomain}/admin/themes/${numericId}/editor`
   }
 
-  // Build the storefront URL for "Open Site"
-  function buildStorefrontUrl(): string | null {
-    if (!shopDomain) return null
-    const base = `https://${shopDomain}`
-    if (!selectedTheme || selectedTheme.role === 'main') return base
-    const numericId = themeGidToId(selectedTheme.id)
-    return `${base}?preview_theme_id=${numericId}`
-  }
-
-  const proxyUrl = buildProxyUrl()
   const editorUrl = buildEditorUrl()
-  const storefrontUrl = buildStorefrontUrl()
 
-  // Auto-open the theme editor when this panel mounts (user switched to Preview tab)
   const openEditor = useCallback(() => {
     if (!editorUrl) return
-    // Check if the window is still open
     if (editorWindowRef.current && !editorWindowRef.current.closed) {
       editorWindowRef.current.focus()
       setEditorOpen(true)
@@ -63,496 +34,74 @@ export default function PreviewPanel({ shopDomain, selectedTheme, refreshKey }: 
     if (win) {
       editorWindowRef.current = win
       setEditorOpen(true)
+      setHasLaunched(true)
     }
-  }, [editorUrl])
+  }, [editorUrl, editorWindowRef])
 
-  // Auto-open on mount
   useEffect(() => {
     if (editorUrl) {
-      openEditor()
+      const timer = setTimeout(() => { openEditor() }, 300)
+      return () => clearTimeout(timer)
     }
-  }, [editorUrl, openEditor])
+  }, [])
 
-  // Poll to detect if editor window was closed
   useEffect(() => {
     const interval = setInterval(() => {
       if (editorWindowRef.current && editorWindowRef.current.closed) {
         setEditorOpen(false)
         editorWindowRef.current = null
+      } else if (editorWindowRef.current && !editorWindowRef.current.closed) {
+        setEditorOpen(true)
       }
-    }, 2000)
+    }, 1500)
     return () => clearInterval(interval)
-  }, [])
-
-  // Reload when refreshKey changes (push happened)
-  useEffect(() => {
-    if (refreshKey > 0) {
-      setLoadKey(k => k + 1)
-      setIsLoading(true)
-      setLoadError(null)
-    }
-  }, [refreshKey])
-
-  function handleManualRefresh() {
-    setLoadKey(k => k + 1)
-    setIsLoading(true)
-    setLoadError(null)
-  }
-
-  function handleOpenSite() {
-    if (storefrontUrl) window.open(storefrontUrl, '_blank')
-  }
-
-  function handleIframeLoad() {
-    setIsLoading(false)
-    setLoadError(null)
-  }
-
-  function handleIframeError() {
-    setIsLoading(false)
-    setLoadError('Failed to load storefront preview')
-  }
-
-  // Device mode widths
-  const deviceWidths: Record<string, string> = {
-    desktop: '100%',
-    tablet: '768px',
-    mobile: '375px',
-  }
+  }, [editorWindowRef])
 
   return (
-    <div style={{
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-      background: 'var(--bg-base)',
-      minWidth: 0,
-    }}>
-      {/* Preview toolbar */}
-      <div style={{
-        height: 40,
-        background: 'var(--bg-surface)',
-        borderBottom: '1px solid var(--border-subtle)',
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 12px',
-        gap: 8,
-        flexShrink: 0,
-      }}>
-        {/* Label */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          flexShrink: 0,
-        }}>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <rect x="1" y="1.5" width="10" height="9" rx="1.5" stroke="var(--cyan)" strokeWidth="1.2"/>
-            <path d="M1 4h10" stroke="var(--cyan)" strokeWidth="1.2"/>
-            <circle cx="2.8" cy="2.75" r="0.5" fill="var(--cyan)"/>
-            <circle cx="4.5" cy="2.75" r="0.5" fill="var(--cyan)"/>
-          </svg>
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            fontWeight: 600,
-            color: 'var(--cyan)',
-            letterSpacing: '0.04em',
-          }}>
-            Live Preview
-          </span>
-          {selectedTheme && (
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              color: 'var(--text-muted)',
-            }}>
-              \u00b7 {selectedTheme.name}
-            </span>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: 'var(--bg-base)', minWidth: 0, padding: 32, position: 'relative' }}>
+      <div className="bg-dots" style={{ position: 'absolute', inset: 0, opacity: 0.3, pointerEvents: 'none' }} />
+      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24, maxWidth: 420, textAlign: 'center' }}>
+        <div style={{ width: 72, height: 72, borderRadius: 20, background: editorOpen ? 'rgba(76,175,80,0.06)' : 'rgba(0,229,255,0.04)', border: `2px solid ${editorOpen ? 'rgba(76,175,80,0.25)' : 'rgba(0,229,255,0.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s ease' }}>
+          {editorOpen ? (
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="3" y="5" width="26" height="18" rx="3" stroke="var(--green)" strokeWidth="1.5"/><path d="M3 10h26" stroke="var(--green)" strokeWidth="1.5"/><circle cx="6" cy="7.5" r="1" fill="var(--green)"/><circle cx="9" cy="7.5" r="1" fill="var(--green)"/><circle cx="12" cy="7.5" r="1" fill="var(--green)"/><path d="M10 17l3 3 6-7" stroke="var(--green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M12 27h8" stroke="var(--green)" strokeWidth="1.5" strokeLinecap="round"/><path d="M16 23v4" stroke="var(--green)" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          ) : (
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="3" y="5" width="26" height="18" rx="3" stroke="var(--cyan)" strokeWidth="1.5"/><path d="M3 10h26" stroke="var(--cyan)" strokeWidth="1.5"/><circle cx="6" cy="7.5" r="1" fill="var(--cyan)"/><circle cx="9" cy="7.5" r="1" fill="var(--cyan)"/><circle cx="12" cy="7.5" r="1" fill="var(--cyan)"/><path d="M20 14l-4 4M20 14h-3M20 14v3" stroke="var(--cyan)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M12 27h8" stroke="var(--cyan)" strokeWidth="1.5" strokeLinecap="round"/><path d="M16 23v4" stroke="var(--cyan)" strokeWidth="1.5" strokeLinecap="round"/></svg>
           )}
         </div>
-
-        {/* Theme Editor status indicator */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 5,
-          padding: '3px 10px',
-          background: editorOpen ? 'rgba(76, 175, 80, 0.08)' : 'rgba(255, 184, 0, 0.08)',
-          border: `1px solid ${editorOpen ? 'rgba(76, 175, 80, 0.25)' : 'rgba(255, 184, 0, 0.25)'}`,
-          borderRadius: 'var(--radius-sm)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          fontWeight: 600,
-          color: editorOpen ? 'var(--green)' : 'var(--amber)',
-          cursor: 'pointer',
-          transition: 'all 0.12s ease',
-          flexShrink: 0,
-          letterSpacing: '0.02em',
-        }}
-        onClick={openEditor}
-        title={editorOpen ? 'Theme editor is open \u2014 click to focus' : 'Click to open the Shopify theme editor'}
-        >
-          <span style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: editorOpen ? 'var(--green)' : 'var(--amber)',
-            animation: editorOpen ? undefined : 'pulse 2s ease-in-out infinite',
-          }} />
-          {editorOpen ? 'Theme Editor Open' : 'Open Theme Editor'}
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.7 }}>
-            <path d="M7 1h2v2M4.5 5.5L9 1M5.5 1H1.5a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5V5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-
-        {/* Device mode toggles */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          background: 'var(--bg-elevated)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-sm)',
-          padding: 2,
-          gap: 1,
-          flexShrink: 0,
-        }}>
-          <DeviceButton
-            mode="desktop"
-            active={deviceMode === 'desktop'}
-            onClick={() => setDeviceMode('desktop')}
-            icon={
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                <rect x="1" y="2" width="11" height="7.5" rx="1" stroke="currentColor" strokeWidth="1.1"/>
-                <path d="M4.5 11h4M6.5 9.5v1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
-              </svg>
-            }
-          />
-          <DeviceButton
-            mode="tablet"
-            active={deviceMode === 'tablet'}
-            onClick={() => setDeviceMode('tablet')}
-            icon={
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                <rect x="2" y="1" width="9" height="11" rx="1.2" stroke="currentColor" strokeWidth="1.1"/>
-                <circle cx="6.5" cy="10.5" r="0.6" fill="currentColor"/>
-              </svg>
-            }
-          />
-          <DeviceButton
-            mode="mobile"
-            active={deviceMode === 'mobile'}
-            onClick={() => setDeviceMode('mobile')}
-            icon={
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                <rect x="3" y="1" width="7" height="11" rx="1.2" stroke="currentColor" strokeWidth="1.1"/>
-                <circle cx="6.5" cy="10.5" r="0.6" fill="currentColor"/>
-              </svg>
-            }
-          />
-        </div>
-
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
-
-        {/* Refresh button */}
-        <ToolbarButton
-          onClick={handleManualRefresh}
-          icon={
-            <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-              <path d="M9.5 5.5A4 4 0 1 1 5.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-              <path d="M9.5 1.5v4H5.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          }
-          label="Refresh"
-        />
-
-        {/* Open site in new tab */}
-        <ToolbarButton
-          onClick={handleOpenSite}
-          icon={
-            <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-              <path d="M1 10L10 1M10 1H6M10 1V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          }
-          label="Open Site"
-        />
-      </div>
-
-      {/* Preview area */}
-      <div style={{
-        flex: 1,
-        position: 'relative',
-        overflow: 'hidden',
-        background: deviceMode === 'desktop' ? '#111' : 'var(--bg-base)',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: deviceMode === 'desktop' ? 'stretch' : 'flex-start',
-        padding: deviceMode === 'desktop' ? 0 : '20px 0',
-      }}>
-        {!proxyUrl ? (
-          <NoStoreView />
-        ) : loadError ? (
-          <ErrorView error={loadError} onRetry={handleManualRefresh} onOpenEditor={openEditor} />
-        ) : (
+        {editorOpen ? (
           <>
-            {/* Loading overlay */}
-            {isLoading && (
-              <div style={{
-                position: 'absolute',
-                inset: 0,
-                background: 'var(--bg-base)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 16,
-                zIndex: 10,
-              }}>
-                <div style={{
-                  display: 'flex',
-                  gap: 6,
-                  alignItems: 'center',
-                  color: 'var(--text-muted)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 12,
-                }}>
-                  <LoadingDots />
-                  Loading live preview...
-                </div>
-                <div style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                  color: 'var(--text-disabled)',
-                }}>
-                  Fetching storefront from {shopDomain}
-                </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 8px rgba(76,175,80,0.5)', animation: 'pulse 2s ease-in-out infinite' }} />
+                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)', fontFamily: 'var(--font-mono)', letterSpacing: '-0.01em' }}>Theme Editor is Open</span>
               </div>
-            )}
-
-            {/* Device frame wrapper */}
-            <div style={{
-              width: deviceWidths[deviceMode],
-              maxWidth: '100%',
-              height: deviceMode === 'desktop' ? '100%' : 'calc(100% - 40px)',
-              ...(deviceMode !== 'desktop' ? {
-                border: '2px solid var(--border-default)',
-                borderRadius: 12,
-                overflow: 'hidden',
-                boxShadow: '0 8px 30px rgba(0,0,0,0.4)',
-              } : {}),
-              transition: 'width 0.3s ease',
-              flexShrink: 0,
-            }}>
-              <iframe
-                key={loadKey}
-                ref={iframeRef}
-                src={`${proxyUrl}${proxyUrl.includes('?') ? '&' : '?'}_t=${loadKey}`}
-                onLoad={handleIframeLoad}
-                onError={handleIframeError}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  border: 'none',
-                  display: 'block',
-                  background: '#fff',
-                }}
-                title="Shopify Store Preview"
-                sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-              />
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>The Shopify theme editor is running in another window. Use the chat panel to describe changes — AI will edit the theme code and push updates to your live editor.</p>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={openEditor} style={{ background: 'rgba(76,175,80,0.08)', border: '1px solid rgba(76,175,80,0.25)', borderRadius: 'var(--radius-md)', cursor: 'pointer', color: 'var(--green)', padding: '8px 16px', fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s ease' }}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="1.5" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M1 4h10" stroke="currentColor" strokeWidth="1.2"/></svg>
+                Focus Editor Window
+              </button>
             </div>
           </>
+        ) : (
+          <>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>{hasLaunched ? 'Theme Editor Closed' : 'Launch Theme Editor'}</div>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>{hasLaunched ? 'The editor window was closed. Click below to reopen the Shopify theme editor alongside this chat panel.' : 'Open the Shopify theme editor in a dedicated window. Use the chat panel on the right to describe changes — AI handles the code.'}</p>
+            </div>
+            <button onClick={openEditor} style={{ background: 'var(--cyan)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', color: 'var(--bg-void)', padding: '10px 24px', fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.15s ease', boxShadow: '0 0 20px rgba(0,229,255,0.15)' }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 1h4v4M5.5 8.5L13 1M7 1H1.5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5V7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              {hasLaunched ? 'Reopen Theme Editor' : 'Open Theme Editor'}
+            </button>
+            {selectedTheme && <div style={{ fontSize: 11, color: 'var(--text-disabled)', fontFamily: 'var(--font-mono)' }}>{selectedTheme.name} · {shopDomain}</div>}
+          </>
         )}
-      </div>
-    </div>
-  )
-}
-
-// === Sub-components ===
-
-interface DeviceButtonProps {
-  mode: string
-  active: boolean
-  onClick: () => void
-  icon: React.ReactNode
-}
-
-function DeviceButton({ mode, active, onClick, icon }: DeviceButtonProps) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 26,
-        height: 22,
-        background: active ? 'var(--bg-overlay)' : 'transparent',
-        border: active ? '1px solid var(--border-default)' : '1px solid transparent',
-        borderRadius: 3,
-        cursor: 'pointer',
-        color: active ? 'var(--cyan)' : 'var(--text-muted)',
-        transition: 'all 0.1s ease',
-        padding: 0,
-      }}
-      onMouseEnter={e => {
-        if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'
-      }}
-      onMouseLeave={e => {
-        if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'
-      }}
-      title={mode.charAt(0).toUpperCase() + mode.slice(1)}
-    >
-      {icon}
-    </button>
-  )
-}
-
-interface ToolbarButtonProps {
-  onClick: () => void
-  icon: React.ReactNode
-  label: string
-}
-
-function ToolbarButton({ onClick, icon, label }: ToolbarButtonProps) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        background: 'none',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-sm)',
-        cursor: 'pointer',
-        color: 'var(--text-muted)',
-        padding: '3px 6px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 4,
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10,
-        transition: 'all 0.12s ease',
-        flexShrink: 0,
-      }}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'
-        ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--border-default)'
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'
-        ;(e.currentTarget as HTMLElement).style.borderColor = 'var(--border-subtle)'
-      }}
-      title={label}
-    >
-      {icon}
-      {label}
-    </button>
-  )
-}
-
-function NoStoreView() {
-  return (
-    <div style={{
-      height: '100%',
-      width: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 12,
-      color: 'var(--text-muted)',
-      fontFamily: 'var(--font-mono)',
-      fontSize: 13,
-    }}>
-      <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-        <rect x="3" y="5" width="34" height="30" rx="4" stroke="var(--border-default)" strokeWidth="1.5"/>
-        <path d="M3 12h34" stroke="var(--border-default)" strokeWidth="1.5"/>
-        <circle cx="8" cy="8.5" r="1.5" fill="var(--border-default)"/>
-        <circle cx="13" cy="8.5" r="1.5" fill="var(--border-default)"/>
-        <path d="M14 24l5-5 3 3 5-6 5 8" stroke="var(--border-default)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-      No store connected
-    </div>
-  )
-}
-
-function ErrorView({ error, onRetry, onOpenEditor }: { error: string; onRetry: () => void; onOpenEditor: () => void }) {
-  return (
-    <div style={{
-      height: '100%',
-      width: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 16,
-      color: 'var(--text-muted)',
-      fontFamily: 'var(--font-mono)',
-      fontSize: 12,
-      padding: 40,
-    }}>
-      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-        <circle cx="16" cy="16" r="12" stroke="var(--amber)" strokeWidth="1.5"/>
-        <path d="M16 10v7M16 21v1" stroke="var(--amber)" strokeWidth="2" strokeLinecap="round"/>
-      </svg>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ color: 'var(--amber)', marginBottom: 4, fontWeight: 600 }}>{error}</div>
-        <div style={{ color: 'var(--text-disabled)', fontSize: 11, maxWidth: 360 }}>
-          The storefront preview could not be loaded. You can try refreshing, or open the Shopify theme editor directly.
+        <div style={{ marginTop: 8, padding: '12px 16px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', width: '100%' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>Tip: Side-by-side mode</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>Arrange the theme editor and this window side-by-side on your screen. Chat with AI here to make changes, then watch them appear in the editor after pushing.</div>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          onClick={onRetry}
-          style={{
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-default)',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-            color: 'var(--text-secondary)',
-            padding: '6px 14px',
-            fontSize: 11,
-            fontFamily: 'var(--font-mono)',
-          }}
-        >
-          Retry
-        </button>
-        <button
-          onClick={onOpenEditor}
-          style={{
-            background: 'rgba(0, 229, 255, 0.08)',
-            border: '1px solid rgba(0, 229, 255, 0.25)',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-            color: 'var(--cyan)',
-            padding: '6px 14px',
-            fontSize: 11,
-            fontFamily: 'var(--font-mono)',
-            fontWeight: 600,
-          }}
-        >
-          Open Theme Editor
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function LoadingDots() {
-  return (
-    <div style={{ display: 'flex', gap: 4 }}>
-      {[0, 1, 2].map(i => (
-        <span
-          key={i}
-          style={{
-            width: 4,
-            height: 4,
-            borderRadius: '50%',
-            background: 'var(--cyan)',
-            animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
-          }}
-        />
-      ))}
     </div>
   )
 }
