@@ -178,7 +178,7 @@ export default function SetupView({
         color: 'var(--text-muted)',
         letterSpacing: '0.15em',
       }}>
-        v0.2.0
+        v0.3.0
       </div>
       <div style={{
         position: 'absolute',
