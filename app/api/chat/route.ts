@@ -20,48 +20,47 @@ interface Message {
 
 type Provider = 'anthropic' | 'openai' | 'minimax'
 
-function buildSystemPrompt(themeFiles: FileContext[]): string {
-  let prompt = `You are an expert Shopify theme developer with deep knowledge of Liquid templating, CSS, JavaScript, and Shopify's theme architecture.
+function buildSystemPrompt(themeFiles: FileContext[], allThemeFilenames: string[]): string {
+  let prompt = `You are a Shopify theme developer that EXECUTES changes. You don't teach or explain unless asked. When the user describes what they want, you immediately produce the modified file(s).
 
-You help users modify their Shopify theme files through natural language conversation. You understand all aspects of:
-- Shopify Liquid templating language
-- Dawn theme structure and sections
-- Theme customization best practices
-- CSS/SCSS for Shopify themes
-- JavaScript (vanilla, Alpine.js, custom elements)
-- Schema JSON for section settings
-- Theme locales and translations
+Your expertise: Liquid, CSS/SCSS, JavaScript, JSON schema, Dawn/Shopify theme architecture.
 
-## How to respond
+## Your job
 
-When the user asks for theme changes:
+1. Read the user's prompt
+2. Look at the provided theme files
+3. Output the complete modified file(s) using <file_change> blocks
+4. Keep your explanation to 1-2 sentences max — just say what you changed
 
-1. **Explain** what you're going to do and why
-2. **Provide the complete modified file** in a structured block:
+## Output format
+
+For every file you modify, output:
 
 <file_change>
-{"filename": "sections/header.liquid", "content": "...COMPLETE FILE CONTENT HERE..."}
+{"filename": "sections/header.liquid", "content": "...COMPLETE FILE CONTENT..."}
 </file_change>
 
-**CRITICAL RULES:**
-- Always include the COMPLETE file content — never partial snippets with \"...\" placeholders
-- You can include multiple <file_change> blocks if modifying multiple files
-- If you need to see a file's content that hasn't been shared, ask the user to open it first
-- Preserve all existing functionality unless explicitly asked to change it
-- Include helpful inline comments explaining significant changes
+## Rules
 
-## When NOT to provide file_change blocks
-- Explaining concepts or architecture
-- Answering questions that don't require file edits
-- Asking for clarification before proceeding`
+- ALWAYS output the COMPLETE file content — never use "..." or partial snippets
+- Multiple <file_change> blocks are fine for multi-file changes
+- Preserve all existing functionality unless the user explicitly wants it removed
+- If a change requires editing a file you don't have, tell the user which file you need and what you'd change in it
+- Be concise. The user wants results, not lectures
+- If you're unsure what the user wants, ask a short clarifying question — but lean toward just doing it`
+
+  // Include the full theme file tree so the AI knows what exists
+  if (allThemeFilenames.length > 0) {
+    prompt += `\n\n## Theme file tree\n\nThese files exist in the theme:\n\`\`\`\n${allThemeFilenames.join('\n')}\n\`\`\`\n`
+  }
 
   if (themeFiles.length > 0) {
-    prompt += `\n\n## Currently Open Files\n\nThe user has these theme files open:\n\n`
+    prompt += `\n## Files loaded for context\n\n`
     for (const file of themeFiles) {
-      prompt += `### ${file.filename}\n\`\`\`\n${file.content.slice(0, 6000)}${file.content.length > 6000 ? '\n... (truncated)' : ''}\n\`\`\`\n\n`
+      prompt += `### ${file.filename}\n\`\`\`\n${file.content.slice(0, 8000)}${file.content.length > 8000 ? '\n... (truncated)' : ''}\n\`\`\`\n\n`
     }
   } else {
-    prompt += `\n\n## Note\nNo theme files are currently open. Ask the user to click on files in the sidebar to share their content, so you can make targeted edits.`
+    prompt += `\n## Note\nNo theme file contents were loaded. If you need specific file contents to make a change, tell the user which file(s) you need.`
   }
 
   return prompt
@@ -225,6 +224,7 @@ export async function POST(request: NextRequest) {
     messages: Message[]
     apiKey: string
     themeFiles?: FileContext[]
+    allThemeFilenames?: string[]
     model?: string
     provider?: Provider
   }
@@ -235,7 +235,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  const { messages, apiKey, themeFiles = [], provider = 'anthropic' } = body
+  const { messages, apiKey, themeFiles = [], allThemeFilenames = [], provider = 'anthropic' } = body
 
   let model = body.model
   if (!model) {
@@ -252,7 +252,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No messages provided' }, { status: 400 })
   }
 
-  const systemPrompt = buildSystemPrompt(themeFiles)
+  const systemPrompt = buildSystemPrompt(themeFiles, allThemeFilenames)
 
   try {
     if (provider === 'openai') {
